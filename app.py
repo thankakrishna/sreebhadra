@@ -20,6 +20,34 @@ st.set_page_config(
 )
 
 # ============================================================
+# GLOBAL CSS - HIDE WHITE HEADER BAR ON ALL PAGES
+# ============================================================
+st.markdown("""
+<style>
+    header[data-testid="stHeader"] {
+        display: none !important;
+        height: 0 !important;
+        visibility: hidden !important;
+    }
+    div[data-testid="stToolbar"] {
+        display: none !important;
+    }
+    div[data-testid="stDecoration"] {
+        display: none !important;
+    }
+    div[data-testid="stStatusWidget"] {
+        display: none !important;
+    }
+    .block-container {
+        padding-top: 1rem !important;
+    }
+    section[data-testid="stSidebar"] > div:first-child {
+        padding-top: 0.5rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================
 # SUPABASE CONNECTION
 # ============================================================
 try:
@@ -38,7 +66,7 @@ except Exception as e:
     st.error(f"Database connection failed: {str(e)}")
 
 # ============================================================
-# TEMPLE ADDRESS CONSTANT
+# TEMPLE ADDRESS CONSTANTS
 # ============================================================
 TEMPLE_NAME = "Sree Bhadreshwari Amman Temple"
 TEMPLE_TRUST = "Samrakshana Seva Trust 179/2004"
@@ -47,211 +75,6 @@ TEMPLE_PINCODE = "629154"
 TEMPLE_FULL_ADDRESS = f"{TEMPLE_NAME}, {TEMPLE_TRUST}, {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}"
 TEMPLE_TAGLINE = "Amme Narayana .. Devi Narayana"
 TEMPLE_TAGLINE_TAMIL = "அம்மே நாராயணா ..தேவி நாராயணா"
-
-# ============================================================
-# PDF GENERATION (with Amman image + full address)
-# ============================================================
-PDF_AVAILABLE = False
-try:
-    from fpdf import FPDF
-    import requests
-    import tempfile
-    import os
-
-    # Download and cache Amman image for PDF
-    @st.cache_data(ttl=86400)
-    def get_amman_image_for_pdf():
-        """Download Amman image and return temp file path for PDF embedding"""
-        try:
-            # Try to use custom uploaded photo first (base64)
-            if st.session_state.get('custom_amman_photo'):
-                b64_data = st.session_state['custom_amman_photo']
-                if ',' in b64_data:
-                    b64_data = b64_data.split(',')[1]
-                img_bytes = base64.b64decode(b64_data)
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                tmp.write(img_bytes)
-                tmp.close()
-                return tmp.name
-        except:
-            pass
-        
-        # Use default Amman image URL
-        try:
-            url = "https://novellum-filestore-mcp.s3.us-east-2.amazonaws.com/atxp:atxp_acct_EaWscsITrvle1aqYknSBl/7da491a3-7fa2-4542-b6f6-8dd3babc1861.png"
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                tmp.write(response.content)
-                tmp.close()
-                return tmp.name
-        except:
-            pass
-        return None
-
-    class BillPDF(FPDF):
-        def __init__(self, amman_img_path=None):
-            super().__init__()
-            self.amman_img_path = amman_img_path
-
-        def header(self):
-            # ---- Amman Image centered at top ----
-            if self.amman_img_path and os.path.exists(self.amman_img_path):
-                try:
-                    # Center the image: page width=210, image width=25
-                    img_x = (210 - 25) / 2
-                    self.image(self.amman_img_path, x=img_x, y=8, w=25, h=25)
-                    self.ln(28)
-                except Exception:
-                    self.ln(5)
-            else:
-                self.ln(5)
-
-            # ---- Temple Name ----
-            self.set_font('Helvetica', 'B', 16)
-            self.set_text_color(139, 0, 0)  # Dark red
-            self.cell(0, 8, TEMPLE_NAME, 0, 1, 'C')
-
-            # ---- Trust Name ----
-            self.set_font('Helvetica', 'B', 10)
-            self.set_text_color(80, 80, 80)
-            self.cell(0, 6, TEMPLE_TRUST, 0, 1, 'C')
-
-            # ---- Address ----
-            self.set_font('Helvetica', '', 9)
-            self.set_text_color(100, 100, 100)
-            self.cell(0, 5, f"{TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}", 0, 1, 'C')
-
-            # ---- Tagline ----
-            self.set_font('Helvetica', 'I', 9)
-            self.set_text_color(200, 100, 0)
-            self.cell(0, 6, TEMPLE_TAGLINE, 0, 1, 'C')
-
-            # ---- Divider line ----
-            self.set_draw_color(255, 107, 53)
-            self.set_line_width(0.8)
-            self.line(10, self.get_y() + 2, 200, self.get_y() + 2)
-            self.ln(6)
-            self.set_text_color(0, 0, 0)
-
-        def footer(self):
-            self.set_y(-30)
-            self.set_draw_color(255, 107, 53)
-            self.set_line_width(0.5)
-            self.line(10, self.get_y(), 200, self.get_y())
-            self.ln(3)
-            self.set_font('Helvetica', 'I', 8)
-            self.set_text_color(100, 100, 100)
-            self.cell(0, 5, 'Thank you for your contribution! May Goddess Bhadreshwari bless you!', 0, 1, 'C')
-            self.set_font('Helvetica', 'I', 9)
-            self.set_text_color(200, 100, 0)
-            self.cell(0, 5, TEMPLE_TAGLINE, 0, 1, 'C')
-            self.set_font('Helvetica', '', 7)
-            self.set_text_color(150, 150, 150)
-            self.cell(0, 5, TEMPLE_FULL_ADDRESS, 0, 1, 'C')
-
-    def generate_bill_pdf(bill_no, manual_bill, bill_book, bill_date,
-                          name, address, mobile, pooja_type, amount):
-        amman_img_path = get_amman_image_for_pdf()
-        pdf = BillPDF(amman_img_path=amman_img_path)
-        pdf.add_page()
-        pdf.set_auto_page_break(auto=True, margin=35)
-
-        # ---- BILL HEADER SECTION ----
-        pdf.set_font('Helvetica', 'B', 13)
-        pdf.set_text_color(139, 0, 0)
-        pdf.cell(0, 8, 'BILL / RECEIPT', 0, 1, 'C')
-        pdf.ln(3)
-        pdf.set_text_color(0, 0, 0)
-
-        # ---- Bill Info Box ----
-        y_start = pdf.get_y()
-        pdf.set_draw_color(255, 107, 53)
-        pdf.set_line_width(0.5)
-        pdf.rect(12, y_start, 186, 30, 'D')
-        pdf.set_xy(15, y_start + 3)
-
-        # Bill details in two columns
-        pdf.set_font('Helvetica', 'B', 9)
-        pdf.cell(35, 6, "Bill No:", 0, 0)
-        pdf.set_font('Helvetica', '', 9)
-        pdf.cell(55, 6, str(bill_no or ''), 0, 0)
-        pdf.set_font('Helvetica', 'B', 9)
-        pdf.cell(35, 6, "Manual Bill No:", 0, 0)
-        pdf.set_font('Helvetica', '', 9)
-        pdf.cell(0, 6, str(manual_bill or ''), 0, 1)
-
-        pdf.set_x(15)
-        pdf.set_font('Helvetica', 'B', 9)
-        pdf.cell(35, 6, "Bill Book No:", 0, 0)
-        pdf.set_font('Helvetica', '', 9)
-        pdf.cell(55, 6, str(bill_book or ''), 0, 0)
-        pdf.set_font('Helvetica', 'B', 9)
-        pdf.cell(35, 6, "Date:", 0, 0)
-        pdf.set_font('Helvetica', '', 9)
-        pdf.cell(0, 6, str(bill_date or ''), 0, 1)
-
-        pdf.set_y(y_start + 33)
-
-        # ---- Devotee Info Box ----
-        y2 = pdf.get_y()
-        pdf.set_fill_color(255, 248, 240)
-        pdf.rect(12, y2, 186, 28, 'DF')
-        pdf.set_xy(15, y2 + 3)
-
-        for label, value in [("Name", str(name or '')), ("Address", str(address or '')), ("Mobile", str(mobile or ''))]:
-            pdf.set_x(15)
-            pdf.set_font('Helvetica', 'B', 10)
-            pdf.cell(35, 7, f"{label}:", 0, 0)
-            pdf.set_font('Helvetica', '', 10)
-            pdf.cell(0, 7, value, 0, 1)
-
-        pdf.ln(5)
-
-        # ---- Pooja & Amount Section ----
-        pdf.set_draw_color(200, 200, 200)
-        pdf.line(12, pdf.get_y(), 198, pdf.get_y())
-        pdf.ln(5)
-
-        pdf.set_x(15)
-        pdf.set_font('Helvetica', 'B', 11)
-        pdf.cell(35, 8, "Pooja Type:", 0, 0)
-        pdf.set_font('Helvetica', '', 11)
-        pdf.cell(0, 8, str(pooja_type or ''), 0, 1)
-
-        pdf.ln(3)
-        pdf.set_x(15)
-        pdf.set_font('Helvetica', 'B', 14)
-        pdf.cell(35, 10, "Amount:", 0, 0)
-        pdf.set_text_color(0, 128, 0)
-        pdf.set_font('Helvetica', 'B', 16)
-        pdf.cell(0, 10, f"Rs. {float(amount):,.2f}", 0, 1)
-        pdf.set_text_color(0, 0, 0)
-
-        pdf.ln(5)
-        pdf.set_draw_color(255, 107, 53)
-        pdf.set_line_width(0.3)
-        pdf.line(12, pdf.get_y(), 198, pdf.get_y())
-
-        return bytes(pdf.output())
-
-    PDF_AVAILABLE = True
-except Exception:
-    PDF_AVAILABLE = False
-
-# ============================================================
-# EXCEL ENGINE DETECTION
-# ============================================================
-EXCEL_ENGINE = None
-try:
-    import xlsxwriter
-    EXCEL_ENGINE = 'xlsxwriter'
-except ImportError:
-    try:
-        import openpyxl
-        EXCEL_ENGINE = 'openpyxl'
-    except ImportError:
-        EXCEL_ENGINE = None
 
 # ============================================================
 # CONSTANTS
@@ -264,35 +87,23 @@ NATCHATHIRAM_LIST = [
     "Uttara Ashadha", "Shravana", "Dhanishta", "Shatabhisha",
     "Purva Bhadrapada", "Uttara Bhadrapada", "Revati"
 ]
-
 RELATION_TYPES = [
     "Self", "Spouse", "Son", "Daughter", "Father", "Mother",
     "Brother", "Sister", "Grandfather", "Grandmother",
     "Father-in-law", "Mother-in-law", "Son-in-law",
     "Daughter-in-law", "Uncle", "Aunt", "Nephew", "Niece", "Other"
 ]
-
 MIN_DATE = date(1900, 1, 1)
 MAX_DATE = date(2050, 12, 31)
 
 # ============================================================
-# PERMANENT AMMAN IMAGE (Embedded Base64)
-# This is a permanent sacred image that stays forever
+# DEFAULT AMMAN IMAGE (SVG fallback)
 # ============================================================
 AMMAN_IMAGE_BASE64 = "data:image/svg+xml;base64," + base64.b64encode("""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
 <defs>
-<radialGradient id="glow" cx="50%" cy="50%" r="50%">
-<stop offset="0%" style="stop-color:#fff8f0;stop-opacity:1"/>
-<stop offset="60%" style="stop-color:#ffe0b2;stop-opacity:1"/>
-<stop offset="100%" style="stop-color:#ffcc80;stop-opacity:1"/>
-</radialGradient>
-<radialGradient id="inner" cx="50%" cy="45%" r="45%">
-<stop offset="0%" style="stop-color:#fff3e0;stop-opacity:1"/>
-<stop offset="100%" style="stop-color:#ffe0b2;stop-opacity:1"/>
-</radialGradient>
-<filter id="shadow">
-<feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#ff6b35" flood-opacity="0.3"/>
-</filter>
+<radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0%" style="stop-color:#fff8f0;stop-opacity:1"/><stop offset="60%" style="stop-color:#ffe0b2;stop-opacity:1"/><stop offset="100%" style="stop-color:#ffcc80;stop-opacity:1"/></radialGradient>
+<radialGradient id="inner" cx="50%" cy="45%" r="45%"><stop offset="0%" style="stop-color:#fff3e0;stop-opacity:1"/><stop offset="100%" style="stop-color:#ffe0b2;stop-opacity:1"/></radialGradient>
+<filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#ff6b35" flood-opacity="0.3"/></filter>
 </defs>
 <circle cx="150" cy="150" r="148" fill="url(#glow)" stroke="#ff6b35" stroke-width="4" filter="url(#shadow)"/>
 <circle cx="150" cy="150" r="138" fill="url(#inner)" stroke="#f7c948" stroke-width="2"/>
@@ -308,13 +119,10 @@ AMMAN_IMAGE_BASE64 = "data:image/svg+xml;base64," + base64.b64encode("""<svg xml
 <text x="50" y="150" text-anchor="middle" font-size="18" fill="#ff6b35">✦</text>
 <text x="250" y="150" text-anchor="middle" font-size="18" fill="#ff6b35">✦</text>
 <text x="150" y="270" text-anchor="middle" font-size="18" fill="#ff6b35">✦</text>
-<text x="75" y="75" text-anchor="middle" font-size="12" fill="#f7c948">✧</text>
-<text x="225" y="75" text-anchor="middle" font-size="12" fill="#f7c948">✧</text>
-<text x="75" y="240" text-anchor="middle" font-size="12" fill="#f7c948">✧</text>
-<text x="225" y="240" text-anchor="middle" font-size="12" fill="#f7c948">✧</text>
 </g>
 </svg>""".strip().encode()).decode()
 
+DEFAULT_LOGIN_BG = "linear-gradient(135deg, #fff5ee 0%, #ffe4c4 25%, #ffdab9 50%, #ffe4c4 75%, #fff5ee 100%)"
 
 # ============================================================
 # CUSTOM CSS
@@ -323,7 +131,7 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
     * { font-family: 'Poppins', sans-serif; }
-    
+
     .main-header {
         background: linear-gradient(135deg, #ff6b35 0%, #f7c948 50%, #ff6b35 100%);
         padding: 20px; border-radius: 15px; text-align: center;
@@ -331,199 +139,77 @@ st.markdown("""
     }
     .main-header h1 { color: #8B0000; font-size: 1.8em; margin: 0; }
     .main-header p { color: #5a1a00; font-size: 1em; margin: 5px 0 0 0; }
-    
+
     .dashboard-banner {
         background: linear-gradient(135deg, #ff6b35 0%, #f7c948 30%, #ff8c42 60%, #f7c948 80%, #ff6b35 100%);
         padding: 25px 20px; border-radius: 18px; text-align: center;
         margin-bottom: 20px; box-shadow: 0 6px 20px rgba(255,107,53,0.35);
-        border: 2px solid rgba(139,0,0,0.15);
-        position: relative;
-        overflow: hidden;
+        border: 2px solid rgba(139,0,0,0.15); position: relative; overflow: hidden;
     }
-    .dashboard-banner::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: radial-gradient(ellipse at center, rgba(255,255,255,0.15) 0%, transparent 70%);
-        pointer-events: none;
-    }
-    .dashboard-banner .temple-name {
-        color: #8B0000; font-size: 1.9em; font-weight: 700;
-        margin: 0; text-shadow: 1px 1px 3px rgba(255,255,255,0.5);
-        letter-spacing: 0.5px;
-    }
-    .dashboard-banner .trust-name {
-        color: #5a1a00; font-size: 1.05em; font-weight: 600;
-        margin: 5px 0 2px 0;
-    }
-    .dashboard-banner .address-line {
-        color: #4a2000; font-size: 0.92em; font-weight: 500;
-        margin: 2px 0;
-    }
-    .dashboard-banner .tagline {
-        color: #8B0000; font-size: 1.05em; font-weight: 600;
-        margin: 8px 0 0 0;
-        letter-spacing: 1px;
-    }
-    .dashboard-banner .divider {
-        width: 60%; height: 2px; margin: 10px auto;
-        background: linear-gradient(90deg, transparent, #8B0000, transparent);
-    }
-    
-    .login-page-bg {
-        background: linear-gradient(135deg, #fff5ee 0%, #ffe4c4 25%, #ffdab9 50%, #ffe4c4 75%, #fff5ee 100%);
-        min-height: 100vh;
-    }
+    .dashboard-banner::before { content: ''; position: absolute; top:0;left:0;right:0;bottom:0; background: radial-gradient(ellipse at center, rgba(255,255,255,0.15) 0%, transparent 70%); pointer-events: none; }
+    .dashboard-banner .temple-name { color: #8B0000; font-size: 1.9em; font-weight: 700; margin: 0; text-shadow: 1px 1px 3px rgba(255,255,255,0.5); }
+    .dashboard-banner .trust-name { color: #5a1a00; font-size: 1.05em; font-weight: 600; margin: 5px 0 2px 0; }
+    .dashboard-banner .address-line { color: #4a2000; font-size: 0.92em; font-weight: 500; margin: 2px 0; }
+    .dashboard-banner .tagline { color: #8B0000; font-size: 1.05em; font-weight: 600; margin: 8px 0 0 0; letter-spacing: 1px; }
+    .dashboard-banner .divider { width: 60%; height: 2px; margin: 10px auto; background: linear-gradient(90deg, transparent, #8B0000, transparent); }
+
     .login-container {
-        padding: 35px; border-radius: 20px;
-        background: rgba(255,255,255,0.95);
-        box-shadow: 0 10px 40px rgba(0,0,0,0.12);
-        border: 2px solid rgba(255,107,53,0.15);
+        padding: 35px; border-radius: 20px; background: rgba(255,255,255,0.95);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.12); border: 2px solid rgba(255,107,53,0.15);
     }
-    
-    .amman-circle {
-        text-align: center; margin: 0 auto 20px auto;
-    }
-    .amman-circle img {
-        width: 160px; height: 160px; border-radius: 50%;
-        object-fit: cover; border: 5px solid #ff6b35;
-        box-shadow: 0 0 25px rgba(255,107,53,0.4),
-                    0 0 50px rgba(247,201,72,0.2),
-                    0 0 75px rgba(255,107,53,0.1);
-        animation: amman-glow 3s ease-in-out infinite alternate;
-    }
+    .amman-circle { text-align: center; margin: 0 auto 20px auto; }
+    .amman-circle img { width: 160px; height: 160px; border-radius: 50%; object-fit: cover; border: 5px solid #ff6b35;
+        box-shadow: 0 0 25px rgba(255,107,53,0.4), 0 0 50px rgba(247,201,72,0.2), 0 0 75px rgba(255,107,53,0.1);
+        animation: amman-glow 3s ease-in-out infinite alternate; }
     @keyframes amman-glow {
-        0% {
-            box-shadow: 0 0 25px rgba(255,107,53,0.4),
-                        0 0 50px rgba(247,201,72,0.2);
-            border-color: #ff6b35;
-        }
-        50% {
-            box-shadow: 0 0 35px rgba(255,107,53,0.6),
-                        0 0 70px rgba(247,201,72,0.3),
-                        0 0 100px rgba(255,107,53,0.15);
-            border-color: #f7c948;
-        }
-        100% {
-            box-shadow: 0 0 25px rgba(255,107,53,0.4),
-                        0 0 50px rgba(247,201,72,0.2);
-            border-color: #ff6b35;
-        }
+        0% { box-shadow: 0 0 25px rgba(255,107,53,0.4), 0 0 50px rgba(247,201,72,0.2); border-color: #ff6b35; }
+        50% { box-shadow: 0 0 35px rgba(255,107,53,0.6), 0 0 70px rgba(247,201,72,0.3), 0 0 100px rgba(255,107,53,0.15); border-color: #f7c948; }
+        100% { box-shadow: 0 0 25px rgba(255,107,53,0.4), 0 0 50px rgba(247,201,72,0.2); border-color: #ff6b35; }
     }
-    
-    .dashboard-amman-circle {
-        text-align: center; margin: 0 auto 10px auto;
-    }
-    .dashboard-amman-circle img {
-        width: 90px; height: 90px; border-radius: 50%;
-        object-fit: cover; border: 4px solid #8B0000;
-        box-shadow: 0 0 20px rgba(255,107,53,0.5),
-                    0 0 40px rgba(247,201,72,0.25);
-    }
-    
-    .sidebar-amman {
-        text-align: center; margin: 0 auto 10px auto;
-    }
-    .sidebar-amman img {
-        width: 80px; height: 80px; border-radius: 50%;
-        border: 3px solid #ff6b35;
-        box-shadow: 0 0 15px rgba(255,107,53,0.3);
-    }
-    
-    .metric-card {
-        padding: 20px; border-radius: 12px; color: white;
-        text-align: center; margin: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-    }
+    .dashboard-amman-circle { text-align: center; margin: 0 auto 10px auto; }
+    .dashboard-amman-circle img { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; border: 4px solid #8B0000;
+        box-shadow: 0 0 20px rgba(255,107,53,0.5), 0 0 40px rgba(247,201,72,0.25); }
+    .sidebar-amman { text-align: center; margin: 0 auto 10px auto; }
+    .sidebar-amman img { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #ff6b35; box-shadow: 0 0 15px rgba(255,107,53,0.3); }
+
+    .metric-card { padding: 20px; border-radius: 12px; color: white; text-align: center; margin: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
     .metric-card.income { background: linear-gradient(135deg, #11998e, #38ef7d); }
     .metric-card.expense { background: linear-gradient(135deg, #eb3349, #f45c43); }
     .metric-card.balance { background: linear-gradient(135deg, #4facfe, #00f2fe); }
     .metric-card.info { background: linear-gradient(135deg, #667eea, #764ba2); }
     .metric-card h3 { margin: 0; font-size: 0.85em; opacity: 0.9; }
     .metric-card h2 { margin: 5px 0 0 0; font-size: 1.7em; }
-    
-    .news-ticker-wrapper {
-        background: linear-gradient(90deg, #1a1a2e, #16213e, #0f3460);
-        padding: 12px 20px; border-radius: 10px; overflow: hidden;
-        white-space: nowrap; margin: 10px 0;
-    }
-    .news-ticker-text {
-        display: inline-block; color: #f7c948; font-size: 1em;
-        animation: scroll-left 35s linear infinite;
-    }
-    @keyframes scroll-left {
-        0% { transform: translateX(100%); }
-        100% { transform: translateX(-200%); }
-    }
-    
-    .pooja-card {
-        background: linear-gradient(135deg, #ffecd2, #fcb69f);
-        padding: 12px 15px; border-radius: 10px; margin: 5px 0;
-        border-left: 4px solid #ff6b35;
-    }
-    .birthday-card {
-        background: linear-gradient(135deg, #a8edea, #fed6e3);
-        padding: 10px 15px; border-radius: 10px; margin: 5px 0;
-        border-left: 4px solid #e91e63;
-    }
-    .success-box {
-        background: #d4edda; border: 1px solid #c3e6cb; padding: 15px;
-        border-radius: 10px; color: #155724; margin: 10px 0;
-    }
-    .wa-btn {
-        display: inline-block; background: #25D366; color: white !important;
-        padding: 10px 25px; border-radius: 8px; text-decoration: none;
-        font-weight: 600; font-size: 0.95em; margin: 5px;
-        box-shadow: 0 3px 8px rgba(37,211,102,0.3);
-    }
+
+    .news-ticker-wrapper { background: linear-gradient(90deg, #1a1a2e, #16213e, #0f3460); padding: 12px 20px; border-radius: 10px; overflow: hidden; white-space: nowrap; margin: 10px 0; }
+    .news-ticker-text { display: inline-block; color: #f7c948; font-size: 1em; animation: scroll-left 35s linear infinite; }
+    @keyframes scroll-left { 0% { transform: translateX(100%); } 100% { transform: translateX(-200%); } }
+
+    .pooja-card { background: linear-gradient(135deg, #ffecd2, #fcb69f); padding: 12px 15px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #ff6b35; }
+    .birthday-card { background: linear-gradient(135deg, #a8edea, #fed6e3); padding: 10px 15px; border-radius: 10px; margin: 5px 0; border-left: 4px solid #e91e63; }
+    .success-box { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 10px; color: #155724; margin: 10px 0; }
+    .wa-btn { display: inline-block; background: #25D366; color: white !important; padding: 10px 25px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 5px; box-shadow: 0 3px 8px rgba(37,211,102,0.3); }
     .wa-btn:hover { background: #128C7E; color: white !important; }
-    .upload-error {
-        background: #ffebee; border: 1px solid #ef9a9a; padding: 10px;
-        border-radius: 8px; margin: 5px 0;
-    }
-    
-    div[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
-    }
-    div[data-testid="stSidebar"] .stButton > button {
-        width: 100%; text-align: left; background: transparent;
-        color: #f0f0f0; border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 8px; margin: 2px 0; padding: 8px 15px;
-    }
-    div[data-testid="stSidebar"] .stButton > button:hover {
-        background: rgba(255,107,53,0.3); border-color: #ff6b35;
-    }
-    
-    .temple-name-login {
-        color: #8B0000; font-size: 1.4em; font-weight: 700;
-        text-align: center; margin: 10px 0; line-height: 1.3;
-    }
-    .tamil-text {
-        color: #c0392b; font-size: 1.1em; font-weight: 600;
-        text-align: center; margin: 5px 0 20px 0;
-    }
+    .upload-error { background: #ffebee; border: 1px solid #ef9a9a; padding: 10px; border-radius: 8px; margin: 5px 0; }
+
+    div[data-testid="stSidebar"] { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
+    div[data-testid="stSidebar"] .stButton > button { width: 100%; text-align: left; background: transparent; color: #f0f0f0; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin: 2px 0; padding: 8px 15px; }
+    div[data-testid="stSidebar"] .stButton > button:hover { background: rgba(255,107,53,0.3); border-color: #ff6b35; }
+
+    .temple-name-login { color: #8B0000; font-size: 1.4em; font-weight: 700; text-align: center; margin: 10px 0; line-height: 1.3; }
+    .tamil-text { color: #c0392b; font-size: 1.1em; font-weight: 600; text-align: center; margin: 5px 0 20px 0; }
+    .settings-photo-preview { text-align: center; margin: 10px 0; }
+    .settings-photo-preview img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 4px solid #ff6b35; box-shadow: 0 0 15px rgba(255,107,53,0.3); }
+    .settings-bg-preview img { width: 100%; max-height: 150px; object-fit: cover; border-radius: 10px; border: 2px solid #ff6b35; }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
 # SESSION STATE
 # ============================================================
-defaults = {
-    'logged_in': False, 'username': '', 'user_role': '',
-    'current_page': 'Dashboard',
-    'custom_amman_photo': None  # For uploaded custom amman photo
-}
+defaults = {'logged_in': False, 'username': '', 'user_role': '', 'current_page': 'Dashboard'}
 for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
-
-# ============================================================
-# GET AMMAN IMAGE (custom uploaded or default)
-# ============================================================
-def get_amman_image():
-    """Returns the Amman image - custom if uploaded, otherwise default SVG"""
-    if st.session_state.get('custom_amman_photo'):
-        return st.session_state['custom_amman_photo']
-    return AMMAN_IMAGE_BASE64
 
 # ============================================================
 # DATABASE HELPERS
@@ -532,45 +218,74 @@ def db_select(table, columns="*", filters=None, gte_filters=None, lte_filters=No
     try:
         query = supabase.table(table).select(columns)
         if filters:
-            for k, v in filters.items():
-                query = query.eq(k, v)
+            for k, v in filters.items(): query = query.eq(k, v)
         if gte_filters:
-            for k, v in gte_filters.items():
-                query = query.gte(k, str(v))
+            for k, v in gte_filters.items(): query = query.gte(k, str(v))
         if lte_filters:
-            for k, v in lte_filters.items():
-                query = query.lte(k, str(v))
+            for k, v in lte_filters.items(): query = query.lte(k, str(v))
         result = query.execute()
         return result.data if result.data else []
-    except Exception:
-        return []
+    except: return []
 
 def db_insert(table, data):
     try:
         result = supabase.table(table).insert(data).execute()
         return result.data if result.data else None
-    except Exception as e:
-        st.error(f"Insert Error ({table}): {e}")
-        return None
+    except Exception as e: st.error(f"Insert Error ({table}): {e}"); return None
 
 def db_update(table, data, col, val):
-    try:
-        return supabase.table(table).update(data).eq(col, val).execute().data
-    except Exception:
-        return None
+    try: return supabase.table(table).update(data).eq(col, val).execute().data
+    except: return None
 
 def db_delete(table, col, val):
-    try:
-        supabase.table(table).delete().eq(col, val).execute()
-        return True
-    except Exception:
-        return False
+    try: supabase.table(table).delete().eq(col, val).execute(); return True
+    except: return False
 
 def file_to_base64(f):
-    if f:
-        return f"data:{f.type};base64,{base64.b64encode(f.getvalue()).decode()}"
+    if f: return f"data:{f.type};base64,{base64.b64encode(f.getvalue()).decode()}"
     return None
 
+# ============================================================
+# SETTINGS HELPERS (Supabase app_settings table)
+# ============================================================
+def load_setting(key):
+    try:
+        result = db_select("app_settings", filters={"setting_key": key})
+        if result and len(result) > 0: return result[0].get('setting_value', None)
+    except: pass
+    return None
+
+def save_setting(key, value):
+    try:
+        existing = db_select("app_settings", filters={"setting_key": key})
+        if existing and len(existing) > 0:
+            db_update("app_settings", {"setting_value": value}, "setting_key", key)
+        else:
+            db_insert("app_settings", {"setting_key": key, "setting_value": value})
+        return True
+    except: return False
+
+def delete_setting(key):
+    try: db_delete("app_settings", "setting_key", key); return True
+    except: return False
+
+# ============================================================
+# GET AMMAN IMAGE (from DB or default)
+# ============================================================
+def get_amman_image():
+    custom = load_setting("custom_amman_photo")
+    if custom and custom.startswith('data:'): return custom
+    return AMMAN_IMAGE_BASE64
+
+def get_login_background_css():
+    custom_bg = load_setting("custom_login_bg")
+    if custom_bg and custom_bg.startswith('data:'):
+        return f"background-image: url('{custom_bg}'); background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;"
+    return f"background: {DEFAULT_LOGIN_BG};"
+
+# ============================================================
+# COMMON HELPERS
+# ============================================================
 def get_income(s, e):
     return sum(float(b.get('amount', 0)) for b in db_select("bills", "amount", gte_filters={"bill_date": s}, lte_filters={"bill_date": e}))
 
@@ -586,26 +301,22 @@ def get_period_dates(p):
     return t, t
 
 def get_todays_birthdays():
-    t = date.today()
-    bdays = []
+    t = date.today(); bdays = []
     for d in db_select("devotees", "name, dob"):
         if d.get('dob'):
             try:
                 dob = datetime.strptime(str(d['dob']), '%Y-%m-%d').date()
-                if dob.month == t.month and dob.day == t.day:
-                    bdays.append(f"🎂 {d['name']} (Devotee)")
+                if dob.month == t.month and dob.day == t.day: bdays.append(f"🎂 {d['name']} (Devotee)")
             except: pass
     for m in db_select("family_members", "name, dob"):
         if m.get('dob'):
             try:
                 dob = datetime.strptime(str(m['dob']), '%Y-%m-%d').date()
-                if dob.month == t.month and dob.day == t.day:
-                    bdays.append(f"🎂 {m['name']} (Family)")
+                if dob.month == t.month and dob.day == t.day: bdays.append(f"🎂 {m['name']} (Family)")
             except: pass
     return bdays
 
-def gen_bill_no():
-    return f"TMS-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
+def gen_bill_no(): return f"TMS-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
 
 def make_whatsapp_link(phone, message):
     phone_clean = ''.join(filter(str.isdigit, str(phone)))
@@ -613,8 +324,7 @@ def make_whatsapp_link(phone, message):
     return f"https://wa.me/{phone_clean}?text={urllib.parse.quote(message)}"
 
 def parse_date_safe(val):
-    if val is None or str(val).strip() == '' or str(val).lower() in ('nan', 'nat', 'none'):
-        return None
+    if val is None or str(val).strip() == '' or str(val).lower() in ('nan', 'nat', 'none'): return None
     val_str = str(val).strip()
     for fmt in ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d', '%d-%m-%y', '%d/%m/%y']:
         try: return datetime.strptime(val_str, fmt).date()
@@ -630,216 +340,174 @@ def safe_str(val):
     s = str(val).strip()
     return '' if s.lower() in ('nan', 'none', 'nat') else s
 
+# ============================================================
+# PDF GENERATION
+# ============================================================
+PDF_AVAILABLE = False
+try:
+    from fpdf import FPDF
+    import tempfile, os
+
+    def get_amman_image_for_pdf():
+        try:
+            custom = load_setting("custom_amman_photo")
+            if custom and custom.startswith('data:') and ',' in custom:
+                img_bytes = base64.b64decode(custom.split(',')[1])
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                tmp.write(img_bytes); tmp.close(); return tmp.name
+        except: pass
+        return None
+
+    class BillPDF(FPDF):
+        def __init__(self, amman_img_path=None):
+            super().__init__(); self.amman_img_path = amman_img_path
+        def header(self):
+            if self.amman_img_path and os.path.exists(self.amman_img_path):
+                try: self.image(self.amman_img_path, x=(210-25)/2, y=8, w=25, h=25); self.ln(28)
+                except: self.ln(5)
+            else: self.ln(5)
+            self.set_font('Helvetica','B',16); self.set_text_color(139,0,0); self.cell(0,8,TEMPLE_NAME,0,1,'C')
+            self.set_font('Helvetica','B',10); self.set_text_color(80,80,80); self.cell(0,6,TEMPLE_TRUST,0,1,'C')
+            self.set_font('Helvetica','',9); self.set_text_color(100,100,100); self.cell(0,5,f"{TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}",0,1,'C')
+            self.set_font('Helvetica','I',9); self.set_text_color(200,100,0); self.cell(0,6,TEMPLE_TAGLINE,0,1,'C')
+            self.set_draw_color(255,107,53); self.set_line_width(0.8); self.line(10,self.get_y()+2,200,self.get_y()+2); self.ln(6); self.set_text_color(0,0,0)
+        def footer(self):
+            self.set_y(-30); self.set_draw_color(255,107,53); self.set_line_width(0.5); self.line(10,self.get_y(),200,self.get_y()); self.ln(3)
+            self.set_font('Helvetica','I',8); self.set_text_color(100,100,100); self.cell(0,5,'Thank you! May Goddess Bhadreshwari bless you!',0,1,'C')
+            self.set_font('Helvetica','I',9); self.set_text_color(200,100,0); self.cell(0,5,TEMPLE_TAGLINE,0,1,'C')
+            self.set_font('Helvetica','',7); self.set_text_color(150,150,150); self.cell(0,5,TEMPLE_FULL_ADDRESS,0,1,'C')
+
+    def generate_bill_pdf(bill_no, manual_bill, bill_book, bill_date, name, address, mobile, pooja_type, amount):
+        pdf = BillPDF(amman_img_path=get_amman_image_for_pdf()); pdf.add_page(); pdf.set_auto_page_break(auto=True, margin=35)
+        pdf.set_font('Helvetica','B',13); pdf.set_text_color(139,0,0); pdf.cell(0,8,'BILL / RECEIPT',0,1,'C'); pdf.ln(3); pdf.set_text_color(0,0,0)
+        y=pdf.get_y(); pdf.set_draw_color(255,107,53); pdf.set_line_width(0.5); pdf.rect(12,y,186,30,'D'); pdf.set_xy(15,y+3)
+        pdf.set_font('Helvetica','B',9); pdf.cell(35,6,"Bill No:",0,0); pdf.set_font('Helvetica','',9); pdf.cell(55,6,str(bill_no or ''),0,0)
+        pdf.set_font('Helvetica','B',9); pdf.cell(35,6,"Manual Bill:",0,0); pdf.set_font('Helvetica','',9); pdf.cell(0,6,str(manual_bill or ''),0,1)
+        pdf.set_x(15); pdf.set_font('Helvetica','B',9); pdf.cell(35,6,"Book No:",0,0); pdf.set_font('Helvetica','',9); pdf.cell(55,6,str(bill_book or ''),0,0)
+        pdf.set_font('Helvetica','B',9); pdf.cell(35,6,"Date:",0,0); pdf.set_font('Helvetica','',9); pdf.cell(0,6,str(bill_date or ''),0,1)
+        pdf.set_y(y+33); y2=pdf.get_y(); pdf.set_fill_color(255,248,240); pdf.rect(12,y2,186,28,'DF'); pdf.set_xy(15,y2+3)
+        for l,v in [("Name",str(name or '')),("Address",str(address or '')),("Mobile",str(mobile or ''))]:
+            pdf.set_x(15); pdf.set_font('Helvetica','B',10); pdf.cell(35,7,f"{l}:",0,0); pdf.set_font('Helvetica','',10); pdf.cell(0,7,v,0,1)
+        pdf.ln(5); pdf.set_draw_color(200,200,200); pdf.line(12,pdf.get_y(),198,pdf.get_y()); pdf.ln(5)
+        pdf.set_x(15); pdf.set_font('Helvetica','B',11); pdf.cell(35,8,"Pooja:",0,0); pdf.set_font('Helvetica','',11); pdf.cell(0,8,str(pooja_type or ''),0,1)
+        pdf.ln(3); pdf.set_x(15); pdf.set_font('Helvetica','B',14); pdf.cell(35,10,"Amount:",0,0)
+        pdf.set_text_color(0,128,0); pdf.set_font('Helvetica','B',16); pdf.cell(0,10,f"Rs. {float(amount):,.2f}",0,1); pdf.set_text_color(0,0,0)
+        return bytes(pdf.output())
+    PDF_AVAILABLE = True
+except: PDF_AVAILABLE = False
 
 # ============================================================
-# EXCEL TEMPLATE
+# EXCEL ENGINE
+# ============================================================
+EXCEL_ENGINE = None
+try: import xlsxwriter; EXCEL_ENGINE = 'xlsxwriter'
+except:
+    try: import openpyxl; EXCEL_ENGINE = 'openpyxl'
+    except: EXCEL_ENGINE = None
+
+# ============================================================
+# BULK TEMPLATE & UPLOAD
 # ============================================================
 def generate_bulk_template():
-    columns = ['Sl_No', 'Type', 'Family_Head_Name', 'Member_Name', 'Address',
-               'Mobile_No', 'WhatsApp_No', 'Relation_Type', 'Date_of_Birth',
-               'Natchathiram', 'Wedding_Day', 'Yearly_Pooja', 'Yearly_Pooja_Dates']
-    sample = [
-        ['1', 'HEAD', 'Raman K', '', '12 Main St', '9876543210', '9876543210', 'Self', '15-05-1980', 'Ashwini', '10-06-2005', 'Archana;Abhishekam', '15-01-2025;20-06-2025'],
-        ['2', 'HEAD', 'Suresh M', '', '45 Temple Rd', '9876543211', '9876543211', 'Self', '20-08-1975', 'Rohini', '15-01-2000', 'Homam', '10-03-2025'],
-        ['1.1', 'MEMBER', 'Raman K', 'Lakshmi R', '', '', '', 'Spouse', '20-07-1985', 'Bharani', '10-06-2005', '', ''],
-        ['1.2', 'MEMBER', 'Raman K', 'Karthik R', '', '', '', 'Son', '10-03-2008', 'Rohini', '', '', ''],
-        ['2.1', 'MEMBER', 'Suresh M', 'Priya S', '', '', '', 'Spouse', '25-12-1980', 'Magha', '15-01-2000', '', ''],
-    ]
+    columns = ['Sl_No','Type','Family_Head_Name','Member_Name','Address','Mobile_No','WhatsApp_No','Relation_Type','Date_of_Birth','Natchathiram','Wedding_Day','Yearly_Pooja','Yearly_Pooja_Dates']
+    sample = [['1','HEAD','Raman K','','12 Main St','9876543210','9876543210','Self','15-05-1980','Ashwini','10-06-2005','Archana;Abhishekam','15-01-2025;20-06-2025'],
+        ['2','HEAD','Suresh M','','45 Temple Rd','9876543211','9876543211','Self','20-08-1975','Rohini','15-01-2000','Homam','10-03-2025'],
+        ['1.1','MEMBER','Raman K','Lakshmi R','','','','Spouse','20-07-1985','Bharani','10-06-2005','',''],
+        ['1.2','MEMBER','Raman K','Karthik R','','','','Son','10-03-2008','Rohini','','',''],
+        ['2.1','MEMBER','Suresh M','Priya S','','','','Spouse','25-12-1980','Magha','15-01-2000','','']]
     df = pd.DataFrame(sample, columns=columns)
-    
     if EXCEL_ENGINE:
         try:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine=EXCEL_ENGINE) as writer:
                 df.to_excel(writer, index=False, sheet_name='Devotees')
-                instr = pd.DataFrame({'Instructions': [
-                    'BULK UPLOAD TEMPLATE', '', 'Type: HEAD or MEMBER',
-                    'Family_Head_Name: Links members to head', 'Member_Name: Members own name',
-                    'Date format: DD-MM-YYYY', 'Multiple poojas: separate with ;',
-                    '', 'Stars: ' + ', '.join(NATCHATHIRAM_LIST),
-                    '', 'Relations: ' + ', '.join(RELATION_TYPES),
-                ]})
-                instr.to_excel(writer, index=False, sheet_name='Instructions')
             return output.getvalue(), 'devotee_template.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        except Exception: pass
-    
-    output = io.StringIO()
-    df.to_csv(output, index=False)
+        except: pass
+    output = io.StringIO(); df.to_csv(output, index=False)
     return output.getvalue().encode('utf-8'), 'devotee_template.csv', 'text/csv'
 
-
 def process_bulk_upload(df):
-    results = {'success': 0, 'errors': [], 'members_added': 0, 'poojas_added': 0}
-    head_id_map = {}
-    df.columns = [c.strip().replace(' ', '_') for c in df.columns]
-    
-    for col in ['Type', 'Family_Head_Name']:
-        if col not in df.columns:
-            results['errors'].append(f"Missing column: {col}")
-            return results
-    
-    heads = df[df['Type'].astype(str).str.upper().str.strip() == 'HEAD']
-    for idx, row in heads.iterrows():
+    results = {'success':0,'errors':[],'members_added':0,'poojas_added':0}; head_id_map = {}
+    df.columns = [c.strip().replace(' ','_') for c in df.columns]
+    for col in ['Type','Family_Head_Name']:
+        if col not in df.columns: results['errors'].append(f"Missing: {col}"); return results
+    for idx, row in df[df['Type'].astype(str).str.upper().str.strip()=='HEAD'].iterrows():
         try:
             name = safe_str(row.get('Family_Head_Name'))
             if not name: results['errors'].append(f"Row {idx+2}: No name"); continue
-            dob = parse_date_safe(row.get('Date_of_Birth'))
-            wed = parse_date_safe(row.get('Wedding_Day'))
-            r = db_insert("devotees", {
-                "name": name, "dob": str(dob) if dob else None,
-                "relation_type": safe_str(row.get('Relation_Type')) or 'Self',
-                "mobile_no": safe_str(row.get('Mobile_No')),
-                "whatsapp_no": safe_str(row.get('WhatsApp_No')),
-                "wedding_day": str(wed) if wed else None,
-                "natchathiram": safe_str(row.get('Natchathiram')) or None,
-                "address": safe_str(row.get('Address')),
-            })
+            dob=parse_date_safe(row.get('Date_of_Birth')); wed=parse_date_safe(row.get('Wedding_Day'))
+            r=db_insert("devotees",{"name":name,"dob":str(dob) if dob else None,"relation_type":safe_str(row.get('Relation_Type')) or 'Self',
+                "mobile_no":safe_str(row.get('Mobile_No')),"whatsapp_no":safe_str(row.get('WhatsApp_No')),"wedding_day":str(wed) if wed else None,
+                "natchathiram":safe_str(row.get('Natchathiram')) or None,"address":safe_str(row.get('Address'))})
             if r:
-                hid = r[0]['id']; head_id_map[name.lower().strip()] = hid; results['success'] += 1
-                ps = safe_str(row.get('Yearly_Pooja'))
-                ds = safe_str(row.get('Yearly_Pooja_Dates'))
+                hid=r[0]['id']; head_id_map[name.lower().strip()]=hid; results['success']+=1
+                ps=safe_str(row.get('Yearly_Pooja')); ds=safe_str(row.get('Yearly_Pooja_Dates'))
                 if ps:
-                    for i, pn in enumerate([p.strip() for p in ps.split(';') if p.strip()]):
-                        pd_list = [d.strip() for d in ds.split(';') if d.strip()] if ds else []
-                        pd_val = parse_date_safe(pd_list[i]) if i < len(pd_list) else None
-                        db_insert("devotee_yearly_pooja", {"devotee_id": hid, "pooja_type": pn, "pooja_date": str(pd_val) if pd_val else None, "description": "Bulk"})
-                        results['poojas_added'] += 1
+                    for i,pn in enumerate([p.strip() for p in ps.split(';') if p.strip()]):
+                        pd_list=[d.strip() for d in ds.split(';') if d.strip()] if ds else []
+                        pd_val=parse_date_safe(pd_list[i]) if i<len(pd_list) else None
+                        db_insert("devotee_yearly_pooja",{"devotee_id":hid,"pooja_type":pn,"pooja_date":str(pd_val) if pd_val else None,"description":"Bulk"})
+                        results['poojas_added']+=1
         except Exception as e: results['errors'].append(f"Row {idx+2}: {e}")
-    
-    members = df[df['Type'].astype(str).str.upper().str.strip() == 'MEMBER']
-    for idx, row in members.iterrows():
+    for idx, row in df[df['Type'].astype(str).str.upper().str.strip()=='MEMBER'].iterrows():
         try:
-            href = safe_str(row.get('Family_Head_Name')).lower().strip()
-            mname = safe_str(row.get('Member_Name')) or safe_str(row.get('Address')) or f"Member of {href}"
-            hid = head_id_map.get(href)
+            href=safe_str(row.get('Family_Head_Name')).lower().strip()
+            mname=safe_str(row.get('Member_Name')) or f"Member of {href}"
+            hid=head_id_map.get(href)
             if not hid:
-                for d in db_select("devotees", "id, name"):
-                    if d['name'].lower().strip() == href: hid = d['id']; break
+                for d in db_select("devotees","id, name"):
+                    if d['name'].lower().strip()==href: hid=d['id']; break
             if not hid: results['errors'].append(f"Row {idx+2}: Head not found"); continue
-            dob = parse_date_safe(row.get('Date_of_Birth'))
-            wed = parse_date_safe(row.get('Wedding_Day'))
-            if db_insert("family_members", {"devotee_id": hid, "name": mname, "dob": str(dob) if dob else None,
-                                             "relation_type": safe_str(row.get('Relation_Type')),
-                                             "wedding_day": str(wed) if wed else None,
-                                             "natchathiram": safe_str(row.get('Natchathiram')) or None}):
-                results['members_added'] += 1
+            dob=parse_date_safe(row.get('Date_of_Birth')); wed=parse_date_safe(row.get('Wedding_Day'))
+            if db_insert("family_members",{"devotee_id":hid,"name":mname,"dob":str(dob) if dob else None,
+                "relation_type":safe_str(row.get('Relation_Type')),"wedding_day":str(wed) if wed else None,
+                "natchathiram":safe_str(row.get('Natchathiram')) or None}):
+                results['members_added']+=1
         except Exception as e: results['errors'].append(f"Row {idx+2}: {e}")
-    
     return results
 
-
 # ============================================================
-# PAGE: LOGIN (Permanent Amman Photo in Round)
+# PAGE: LOGIN (Clean - NO upload, NO white bar)
 # ============================================================
 def page_login():
-    # Set login page background + HIDE the white header bar
-    st.markdown("""
-    <style>
-        .stApp {
-            background: linear-gradient(135deg, #fff5ee 0%, #ffe4c4 25%, #ffdab9 50%, #ffe4c4 75%, #fff5ee 100%);
-        }
-        /* HIDE the white top header/toolbar bar */
-        header[data-testid="stHeader"] {
-            background: transparent !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
-            border-bottom: none !important;
-            box-shadow: none !important;
-        }
-        /* Also hide the toolbar decoration */
-        div[data-testid="stToolbar"] {
-            display: none !important;
-        }
-        /* Hide the top decoration bar */
-        div[data-testid="stDecoration"] {
-            display: none !important;
-        }
-        /* Remove any top padding/margin from main block */
-        .block-container {
-            padding-top: 1rem !important;
-        }
-        /* Make the top status bar transparent */
-        div[data-testid="stStatusWidget"] {
-            display: none !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+    bg_css = get_login_background_css()
+    st.markdown(f"<style>.stApp {{ {bg_css} }}</style>", unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         st.markdown('<div class="login-container">', unsafe_allow_html=True)
-        
-        # PERMANENT AMMAN PHOTO IN ROUND
         amman_img = get_amman_image()
+        st.markdown(f'<div class="amman-circle"><img src="{amman_img}" alt="Amman"></div>', unsafe_allow_html=True)
         st.markdown(f"""
-        <div class="amman-circle">
-            <img src="{amman_img}" alt="Sree Bhadreshwari Amman">
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Temple Name with full address
-        st.markdown(f"""
-        <div class="temple-name-login">
-            🛕 {TEMPLE_NAME}<br>Management System
-        </div>
+        <div class="temple-name-login">🛕 {TEMPLE_NAME}<br>Management System</div>
         <div style="text-align:center;color:#5a1a00;font-size:0.85em;font-weight:500;margin:-10px 0 5px 0;">
-            {TEMPLE_TRUST}<br>
-            {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}
-        </div>
-        <div class="tamil-text">
-            🙏 {TEMPLE_TAGLINE_TAMIL} 🙏
-        </div>
+            {TEMPLE_TRUST}<br>{TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}</div>
+        <div class="tamil-text">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</div>
         """, unsafe_allow_html=True)
 
         with st.form("login"):
-            u = st.text_input("👤 Username")
-            p = st.text_input("🔑 Password", type="password")
+            u = st.text_input("👤 Username"); p = st.text_input("🔑 Password", type="password")
             if st.form_submit_button("🚀 Login", use_container_width=True):
-                if not u or not p:
-                    st.warning("⚠️ Enter both fields!")
-                elif not DB_CONNECTED:
-                    st.error("❌ DB not connected!")
+                if not u or not p: st.warning("⚠️ Enter both fields!")
+                elif not DB_CONNECTED: st.error("❌ DB not connected!")
                 else:
                     users = db_select("users", filters={"username": u})
                     if users and users[0].get('password_hash') == p:
-                        st.session_state.logged_in = True
-                        st.session_state.username = u
+                        st.session_state.logged_in = True; st.session_state.username = u
                         st.session_state.user_role = users[0].get('role', 'user')
-                        st.success("✅ Success!")
-                        time.sleep(0.5)
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid credentials!")
+                        st.success("✅ Success!"); time.sleep(0.5); st.rerun()
+                    else: st.error("❌ Invalid credentials!")
 
-        # Admin option to change Amman photo
-        if st.checkbox("🔧 Admin: Change Amman Photo"):
-            new_photo = st.file_uploader("Upload new Amman photo (JPG/PNG)", type=['jpg', 'jpeg', 'png'], key="amman_up")
-            if new_photo:
-                st.session_state.custom_amman_photo = file_to_base64(new_photo)
-                st.success("✅ Amman photo updated!")
-                st.rerun()
-            if st.session_state.get('custom_amman_photo'):
-                if st.button("🔄 Reset to Default"):
-                    st.session_state.custom_amman_photo = None
-                    st.rerun()
-
-        st.markdown("""
-        <div style="text-align:center;color:#999;font-size:0.8em;margin-top:15px;">
-            Default Login: admin / admin123
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div style="text-align:center;color:#999;font-size:0.8em;margin-top:15px;">Default: admin / admin123</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
-# PAGE: DASHBOARD (with full address banner + Amman image)
+# PAGE: DASHBOARD
 # ============================================================
 def page_dashboard():
     amman_img = get_amman_image()
-    st.markdown(f"""
-    <div class="dashboard-banner">
-        <div class="dashboard-amman-circle">
-            <img src="{amman_img}" alt="Sree Bhadreshwari Amman">
-        </div>
+    st.markdown(f"""<div class="dashboard-banner">
+        <div class="dashboard-amman-circle"><img src="{amman_img}" alt="Amman"></div>
         <div class="temple-name">🛕 {TEMPLE_NAME}</div>
         <div class="trust-name">{TEMPLE_TRUST}</div>
         <div class="address-line">📍 {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}</div>
@@ -848,132 +516,108 @@ def page_dashboard():
     </div>""", unsafe_allow_html=True)
 
     tparts = get_todays_birthdays()
-    for n in db_select("news_ticker", filters={"is_active": True}):
-        tparts.append(f"📢 {n['message']}")
-    if not tparts:
-        tparts.append(f"🛕 Welcome to {TEMPLE_NAME}! 🙏")
+    for n in db_select("news_ticker", filters={"is_active": True}): tparts.append(f"📢 {n['message']}")
+    if not tparts: tparts.append(f"🛕 Welcome to {TEMPLE_NAME}! 🙏")
     st.markdown(f'<div class="news-ticker-wrapper"><div class="news-ticker-text">{" &nbsp;⭐&nbsp; ".join(tparts)}</div></div>', unsafe_allow_html=True)
 
-    period = st.selectbox("📅 Period", ["Daily", "Weekly", "Monthly", "Yearly"])
-    s, e = get_period_dates(period)
-    inc, exp = get_income(s, e), get_expense(s, e)
-    bal, td = inc - exp, len(db_select("devotees", "id"))
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: st.markdown(f'<div class="metric-card income"><h3>💰 {period} Income</h3><h2>₹ {inc:,.2f}</h2></div>', unsafe_allow_html=True)
-    with c2: st.markdown(f'<div class="metric-card expense"><h3>💸 {period} Expenses</h3><h2>₹ {exp:,.2f}</h2></div>', unsafe_allow_html=True)
-    with c3: st.markdown(f'<div class="metric-card balance"><h3>💎 Balance</h3><h2>₹ {bal:,.2f}</h2></div>', unsafe_allow_html=True)
-    with c4: st.markdown(f'<div class="metric-card info"><h3>👥 Devotees</h3><h2>{td}</h2></div>', unsafe_allow_html=True)
+    period = st.selectbox("📅 Period", ["Daily","Weekly","Monthly","Yearly"])
+    s, e = get_period_dates(period); inc, exp = get_income(s,e), get_expense(s,e)
+    bal, td = inc-exp, len(db_select("devotees","id"))
+    c1,c2,c3,c4=st.columns(4)
+    with c1: st.markdown(f'<div class="metric-card income"><h3>💰 {period} Income</h3><h2>₹ {inc:,.2f}</h2></div>',unsafe_allow_html=True)
+    with c2: st.markdown(f'<div class="metric-card expense"><h3>💸 {period} Expenses</h3><h2>₹ {exp:,.2f}</h2></div>',unsafe_allow_html=True)
+    with c3: st.markdown(f'<div class="metric-card balance"><h3>💎 Balance</h3><h2>₹ {bal:,.2f}</h2></div>',unsafe_allow_html=True)
+    with c4: st.markdown(f'<div class="metric-card info"><h3>👥 Devotees</h3><h2>{td}</h2></div>',unsafe_allow_html=True)
 
     st.markdown("---")
     cl, cr = st.columns(2)
     with cl:
         st.markdown("### 🎂 Birthdays Today")
         bdays = get_todays_birthdays()
-        for b in bdays: st.markdown(f'<div class="birthday-card">🎉 {b} 🎈</div>', unsafe_allow_html=True)
+        for b in bdays: st.markdown(f'<div class="birthday-card">🎉 {b} 🎈</div>',unsafe_allow_html=True)
         if not bdays: st.info("No birthdays today")
     with cr:
         st.markdown("### 🙏 Today's Pooja")
         for p in db_select("daily_pooja", filters={"pooja_date": str(date.today())}):
-            ic = "✅" if p.get('status') == 'completed' else "⏳"
-            st.markdown(f'<div class="pooja-card">{ic} <b>{p["pooja_name"]}</b> — {p.get("pooja_time","")}</div>', unsafe_allow_html=True)
-            if p.get('status') != 'completed':
-                if st.button("Complete", key=f"c_{p['id']}"):
-                    db_update("daily_pooja", {"status": "completed"}, "id", p['id']); st.rerun()
+            ic="✅" if p.get('status')=='completed' else "⏳"
+            st.markdown(f'<div class="pooja-card">{ic} <b>{p["pooja_name"]}</b> — {p.get("pooja_time","")}</div>',unsafe_allow_html=True)
+            if p.get('status')!='completed':
+                if st.button("Complete",key=f"c_{p['id']}"): db_update("daily_pooja",{"status":"completed"},"id",p['id']); st.rerun()
         with st.expander("➕ Add Pooja"):
             with st.form("adp"):
-                dn, dt_t, dd = st.text_input("Name"), st.text_input("Time"), st.date_input("Date")
+                dn,dt_t,dd=st.text_input("Name"),st.text_input("Time"),st.date_input("Date")
                 if st.form_submit_button("Add"):
-                    if dn: db_insert("daily_pooja", {"pooja_name": dn, "pooja_time": dt_t, "pooja_date": str(dd), "status": "pending"}); st.rerun()
-
+                    if dn: db_insert("daily_pooja",{"pooja_name":dn,"pooja_time":dt_t,"pooja_date":str(dd),"status":"pending"}); st.rerun()
     st.markdown("---")
-    st.bar_chart(pd.DataFrame({"Category": ["Income", "Expenses", "Balance"], "₹": [inc, exp, bal]}).set_index("Category"))
-
+    st.bar_chart(pd.DataFrame({"Category":["Income","Expenses","Balance"],"₹":[inc,exp,bal]}).set_index("Category"))
 
 # ============================================================
 # PAGE: DEVOTEE ENROLLMENT
 # ============================================================
 def page_devotee_enrollment():
-    st.markdown('<div class="main-header"><h1>👥 Devotee Enrollment</h1><p>Register, Bulk Upload & Manage</p></div>', unsafe_allow_html=True)
-    tab1, tab2, tab3, tab4 = st.tabs(["➕ New", "📤 Bulk Upload", "🔍 Search", "👨‍👩‍👧‍👦 Family"])
-
+    st.markdown('<div class="main-header"><h1>👥 Devotee Enrollment</h1><p>Register, Bulk Upload & Manage</p></div>',unsafe_allow_html=True)
+    tab1,tab2,tab3,tab4=st.tabs(["➕ New","📤 Bulk Upload","🔍 Search","👨‍👩‍👧‍👦 Family"])
     with tab1:
-        with st.form("enroll", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                nm = st.text_input("👤 Name *"); db_v = st.date_input("📅 DOB", value=date(1990,1,1), min_value=MIN_DATE, max_value=MAX_DATE)
-                rl = st.selectbox("👪 Relation", RELATION_TYPES); mb = st.text_input("📱 Mobile"); wa = st.text_input("📲 WhatsApp")
-            with c2:
-                wd = st.date_input("💒 Wedding", value=None, min_value=MIN_DATE, max_value=MAX_DATE)
-                nt = st.selectbox("⭐ Star", ["--"]+NATCHATHIRAM_LIST); ad = st.text_area("🏠 Address", height=80)
-                ph = st.file_uploader("📷 Photo", type=['jpg','jpeg','png'])
-            st.markdown("#### 🙏 Yearly Pooja")
-            yc1, yc2, yc3 = st.columns(3)
-            ptl = [p['name'] for p in db_select("pooja_types", "name")]
-            with yc1: ypt = st.selectbox("Type", ["--"]+ptl, key="y1t")
-            with yc2: ypd = st.date_input("Date", key="y1d", min_value=MIN_DATE, max_value=MAX_DATE)
-            with yc3: ypdesc = st.text_input("Desc", key="y1dc")
-            if st.form_submit_button("✅ Register", use_container_width=True):
+        with st.form("enroll",clear_on_submit=True):
+            c1,c2=st.columns(2)
+            with c1: nm=st.text_input("👤 Name *"); db_v=st.date_input("📅 DOB",value=date(1990,1,1),min_value=MIN_DATE,max_value=MAX_DATE); rl=st.selectbox("👪 Relation",RELATION_TYPES); mb=st.text_input("📱 Mobile"); wa=st.text_input("📲 WhatsApp")
+            with c2: wd=st.date_input("💒 Wedding",value=None,min_value=MIN_DATE,max_value=MAX_DATE); nt=st.selectbox("⭐ Star",["--"]+NATCHATHIRAM_LIST); ad=st.text_area("🏠 Address",height=80); ph=st.file_uploader("📷 Photo",type=['jpg','jpeg','png'])
+            st.markdown("#### 🙏 Yearly Pooja"); yc1,yc2,yc3=st.columns(3)
+            ptl=[p['name'] for p in db_select("pooja_types","name")]
+            with yc1: ypt=st.selectbox("Type",["--"]+ptl,key="y1t")
+            with yc2: ypd=st.date_input("Date",key="y1d",min_value=MIN_DATE,max_value=MAX_DATE)
+            with yc3: ypdesc=st.text_input("Desc",key="y1dc")
+            if st.form_submit_button("✅ Register",use_container_width=True):
                 if nm.strip():
-                    r = db_insert("devotees", {"name": nm.strip(), "dob": str(db_v), "relation_type": rl, "mobile_no": mb, "whatsapp_no": wa,
-                                                "wedding_day": str(wd) if wd else None, "natchathiram": nt if nt != "--" else None, "address": ad, "photo_url": file_to_base64(ph)})
-                    if r and ypt != "--":
-                        db_insert("devotee_yearly_pooja", {"devotee_id": r[0]['id'], "pooja_type": ypt, "pooja_date": str(ypd), "description": ypdesc})
+                    r=db_insert("devotees",{"name":nm.strip(),"dob":str(db_v),"relation_type":rl,"mobile_no":mb,"whatsapp_no":wa,"wedding_day":str(wd) if wd else None,"natchathiram":nt if nt!="--" else None,"address":ad,"photo_url":file_to_base64(ph)})
+                    if r and ypt!="--": db_insert("devotee_yearly_pooja",{"devotee_id":r[0]['id'],"pooja_type":ypt,"pooja_date":str(ypd),"description":ypdesc})
                     if r: st.success(f"✅ '{nm}' enrolled!"); st.rerun()
-
     with tab2:
         st.markdown("### 📤 Bulk Upload Devotees")
-        tb, tn, tm = generate_bulk_template()
-        st.download_button(f"📥 Download Template ({tn.split('.')[-1].upper()})", data=tb, file_name=tn, mime=tm, use_container_width=True)
-        st.markdown("""
-        **Format:** Type=HEAD/MEMBER | Family_Head_Name links members to head | Member_Name for members  
-        **Dates:** DD-MM-YYYY | **Multiple poojas:** separate with `;`
-        """)
-        uf = st.file_uploader("📁 Upload File", type=['xlsx','xls','csv'], key="bulk")
+        tb,tn,tm=generate_bulk_template()
+        st.download_button(f"📥 Template ({tn.split('.')[-1].upper()})",data=tb,file_name=tn,mime=tm,use_container_width=True)
+        uf=st.file_uploader("📁 Upload",type=['xlsx','xls','csv'],key="bulk")
         if uf:
             try:
-                df = pd.read_csv(uf) if uf.name.endswith('.csv') else pd.read_excel(uf, sheet_name=0)
-                st.dataframe(df.head(15), use_container_width=True, hide_index=True)
-                if st.button("🚀 Process & Upload", use_container_width=True, type="primary"):
-                    with st.spinner("Processing..."):
-                        res = process_bulk_upload(df)
-                    rc1, rc2, rc3 = st.columns(3)
-                    with rc1: st.markdown(f'<div class="metric-card income"><h3>Heads</h3><h2>{res["success"]}</h2></div>', unsafe_allow_html=True)
-                    with rc2: st.markdown(f'<div class="metric-card balance"><h3>Members</h3><h2>{res["members_added"]}</h2></div>', unsafe_allow_html=True)
-                    with rc3: st.markdown(f'<div class="metric-card info"><h3>Poojas</h3><h2>{res["poojas_added"]}</h2></div>', unsafe_allow_html=True)
+                df=pd.read_csv(uf) if uf.name.endswith('.csv') else pd.read_excel(uf,sheet_name=0)
+                st.dataframe(df.head(15),use_container_width=True,hide_index=True)
+                if st.button("🚀 Process",use_container_width=True,type="primary"):
+                    with st.spinner("Processing..."): res=process_bulk_upload(df)
+                    rc1,rc2,rc3=st.columns(3)
+                    with rc1: st.markdown(f'<div class="metric-card income"><h3>Heads</h3><h2>{res["success"]}</h2></div>',unsafe_allow_html=True)
+                    with rc2: st.markdown(f'<div class="metric-card balance"><h3>Members</h3><h2>{res["members_added"]}</h2></div>',unsafe_allow_html=True)
+                    with rc3: st.markdown(f'<div class="metric-card info"><h3>Poojas</h3><h2>{res["poojas_added"]}</h2></div>',unsafe_allow_html=True)
                     if res['errors']:
                         with st.expander(f"⚠️ {len(res['errors'])} Errors"):
-                            for err in res['errors']: st.markdown(f'<div class="upload-error">❌ {err}</div>', unsafe_allow_html=True)
-                    if res['success'] > 0: st.balloons()
+                            for err in res['errors']: st.markdown(f'<div class="upload-error">❌ {err}</div>',unsafe_allow_html=True)
+                    if res['success']>0: st.balloons()
             except Exception as e: st.error(f"Error: {e}")
-
     with tab3:
-        sc1, sc2, sc3 = st.columns(3)
-        with sc1: sn = st.text_input("Name", key="sn")
-        with sc2: sm = st.text_input("Mobile", key="sm")
-        with sc3: sa = st.text_input("Address", key="sa")
-        devs = db_select("devotees")
-        if sn: devs = [d for d in devs if sn.lower() in d.get('name','').lower()]
-        if sm: devs = [d for d in devs if sm in d.get('mobile_no','')]
-        if sa: devs = [d for d in devs if sa.lower() in d.get('address','').lower()]
+        sc1,sc2,sc3=st.columns(3)
+        with sc1: sn=st.text_input("Name",key="sn")
+        with sc2: sm=st.text_input("Mobile",key="sm")
+        with sc3: sa=st.text_input("Address",key="sa")
+        devs=db_select("devotees")
+        if sn: devs=[d for d in devs if sn.lower() in d.get('name','').lower()]
+        if sm: devs=[d for d in devs if sm in d.get('mobile_no','')]
+        if sa: devs=[d for d in devs if sa.lower() in d.get('address','').lower()]
         st.markdown(f"**Found: {len(devs)}**")
         for dev in devs:
             with st.expander(f"👤 {dev['name']} | 📱 {dev.get('mobile_no','N/A')}"):
-                dc1, dc2 = st.columns([3,1])
+                dc1,dc2=st.columns([3,1])
                 with dc1:
                     for l,k in [("Name","name"),("DOB","dob"),("Mobile","mobile_no"),("WhatsApp","whatsapp_no"),("Relation","relation_type"),("Wedding","wedding_day"),("Star","natchathiram"),("Address","address")]:
                         st.write(f"**{l}:** {dev.get(k,'N/A')}")
                 with dc2:
-                    if dev.get('photo_url') and dev['photo_url'].startswith('data:'): st.markdown(f'<img src="{dev["photo_url"]}" width="120" style="border-radius:10px">', unsafe_allow_html=True)
+                    if dev.get('photo_url') and dev['photo_url'].startswith('data:'): st.markdown(f'<img src="{dev["photo_url"]}" width="120" style="border-radius:10px">',unsafe_allow_html=True)
                 st.markdown("**Yearly Poojas:**")
-                for yp in db_select("devotee_yearly_pooja", filters={"devotee_id": dev['id']}):
-                    yc1, yc2 = st.columns([5,1])
+                for yp in db_select("devotee_yearly_pooja",filters={"devotee_id":dev['id']}):
+                    yc1,yc2=st.columns([5,1])
                     with yc1: st.write(f"• {yp['pooja_type']} — {yp.get('pooja_date','')}")
                     with yc2:
-                        if st.button("❌", key=f"dyp_{yp['id']}"): db_delete("devotee_yearly_pooja","id",yp['id']); st.rerun()
+                        if st.button("❌",key=f"dyp_{yp['id']}"): db_delete("devotee_yearly_pooja","id",yp['id']); st.rerun()
                 with st.form(f"ayp_{dev['id']}"):
-                    ac1,ac2,ac3=st.columns(3)
-                    ptn=[p['name'] for p in db_select("pooja_types","name")]
+                    ac1,ac2,ac3=st.columns(3); ptn=[p['name'] for p in db_select("pooja_types","name")]
                     with ac1: nypt=st.selectbox("Type",["--"]+ptn,key=f"nt_{dev['id']}")
                     with ac2: nypd=st.date_input("Date",key=f"nd_{dev['id']}",min_value=MIN_DATE,max_value=MAX_DATE)
                     with ac3: ndc=st.text_input("Desc",key=f"ndc_{dev['id']}")
@@ -1002,7 +646,6 @@ def page_devotee_enrollment():
                         if st.form_submit_button("💾"):
                             db_update("devotees",{"name":en,"dob":str(ed),"mobile_no":em,"relation_type":er,"natchathiram":es if es!="--" else None,"address":ea},"id",dev['id'])
                             st.session_state[f"ed_{dev['id']}"]=False; st.rerun()
-
     with tab4:
         ds=db_select("devotees","id,name,mobile_no")
         if not ds: st.info("No devotees"); return
@@ -1019,12 +662,11 @@ def page_devotee_enrollment():
             if st.form_submit_button("➕",use_container_width=True):
                 if fn.strip(): db_insert("family_members",{"devotee_id":hi,"name":fn.strip(),"dob":str(fd),"relation_type":fr,"wedding_day":str(fw) if fw else None,"natchathiram":fs if fs!="--" else None}); st.rerun()
 
-
 # ============================================================
 # PAGE: BILLING
 # ============================================================
 def page_billing():
-    st.markdown('<div class="main-header"><h1>🧾 Billing</h1><p>PDF Download & WhatsApp</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>🧾 Billing</h1><p>PDF Download & WhatsApp</p></div>',unsafe_allow_html=True)
     tab1,tab2=st.tabs(["➕ New","📋 History"])
     with tab1:
         dt=st.radio("Type",["Enrolled","Guest"],horizontal=True)
@@ -1046,8 +688,7 @@ def page_billing():
                 if al:
                     dm={f"{d['name']} — {d.get('mobile_no','N/A')}":d for d in al}; ch=st.selectbox("Select",list(dm.keys()))
                     if ch: sd=dm[ch]; did=sd['id']; st.markdown(f'<div class="success-box">👤 <b>{sd["name"]}</b><br>📱 {sd.get("mobile_no","N/A")} 📲 {sd.get("whatsapp_no","N/A")}<br>🏠 {sd.get("address","N/A")}</div>',unsafe_allow_html=True)
-            else:
-                gn=st.text_input("Name *"); ga=st.text_area("Address *",height=60); gm=st.text_input("📱 Mobile"); gw=st.text_input("📲 WhatsApp")
+            else: gn=st.text_input("Name *"); ga=st.text_area("Address *",height=60); gm=st.text_input("📱 Mobile"); gw=st.text_input("📲 WhatsApp")
         if st.button("🧾 Generate",use_container_width=True,type="primary"):
             ok=True
             if dt=="Enrolled" and not did: st.error("Select!"); ok=False
@@ -1062,28 +703,21 @@ def page_billing():
                         di=db_select("devotees",filters={"id":did}); bn_=di[0]['name'] if di else "N/A"; ba=di[0].get('address','') if di else ""; bm=di[0].get('mobile_no','') if di else ""; bwn=di[0].get('whatsapp_no','') if di else ""
                     else: bn_,ba,bm,bwn=gn,ga,gm,gw
                     st.success(f"✅ Bill: {bn}")
-                    # On-screen bill with full temple address
                     st.markdown(f"""<div style="background:#fffdf7;padding:25px;border:2px solid #ff6b35;border-radius:15px;max-width:550px;margin:20px auto;">
                         <div style="text-align:center;border-bottom:2px solid #ff6b35;padding-bottom:12px;">
                             <h2 style="color:#8B0000;margin:0;">🛕 {TEMPLE_NAME}</h2>
                             <p style="margin:3px 0;color:#5a1a00;font-weight:600;font-size:0.9em;">{TEMPLE_TRUST}</p>
                             <p style="margin:2px 0;color:#666;font-size:0.85em;">📍 {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}</p>
-                            <p style="margin:3px 0;color:#c0392b;font-size:0.9em;">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</p>
-                        </div>
+                            <p style="margin:3px 0;color:#c0392b;font-size:0.9em;">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</p></div>
                         <table style="width:100%;margin:15px 0;"><tr><td><b>Bill:</b></td><td>{bn}</td></tr><tr><td><b>Manual:</b></td><td>{mbl}</td></tr><tr><td><b>Book:</b></td><td>{bb}</td></tr><tr><td><b>Date:</b></td><td>{bd}</td></tr>
                         <tr><td colspan="2"><hr style="border:1px dashed #ccc"></td></tr><tr><td><b>Name:</b></td><td>{bn_}</td></tr><tr><td><b>Address:</b></td><td>{ba}</td></tr><tr><td><b>Mobile:</b></td><td>{bm}</td></tr>
                         <tr><td colspan="2"><hr style="border:1px dashed #ccc"></td></tr><tr><td><b>Pooja:</b></td><td>{pn}</td></tr><tr><td><b>Amount:</b></td><td style="font-size:1.4em;color:#11998e"><b>₹ {am:,.2f}</b></td></tr></table>
-                        <div style="text-align:center;border-top:2px solid #ff6b35;padding-top:10px;">
-                            <p style="color:#666;margin:0;">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</p>
-                            <p style="color:#999;margin:3px 0;font-size:0.75em;">{TEMPLE_FULL_ADDRESS}</p>
-                        </div></div>""",unsafe_allow_html=True)
-                    st.markdown("---")
-                    dl1,dl2=st.columns(2)
+                        <div style="text-align:center;border-top:2px solid #ff6b35;padding-top:10px;"><p style="color:#666;margin:0;">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</p>
+                        <p style="color:#999;margin:3px 0;font-size:0.75em;">{TEMPLE_FULL_ADDRESS}</p></div></div>""",unsafe_allow_html=True)
+                    st.markdown("---"); dl1,dl2=st.columns(2)
                     with dl1:
                         if PDF_AVAILABLE:
-                            try:
-                                pdf=generate_bill_pdf(bn,mbl,bb,bd,bn_,ba,bm,pn,am)
-                                st.download_button("📥 Download PDF",data=pdf,file_name=f"Bill_{bn}.pdf",mime="application/pdf",use_container_width=True)
+                            try: st.download_button("📥 PDF",data=generate_bill_pdf(bn,mbl,bb,bd,bn_,ba,bm,pn,am),file_name=f"Bill_{bn}.pdf",mime="application/pdf",use_container_width=True)
                             except Exception as ex: st.warning(f"PDF error: {ex}")
                     with dl2:
                         wn=bwn or bm
@@ -1102,22 +736,23 @@ def page_billing():
                     if PDF_AVAILABLE:
                         try:
                             if b.get('devotee_type')=='enrolled' and b.get('devotee_id'):
-                                di=db_select("devotees",filters={"id":b['devotee_id']}); pn=di[0]['name'] if di else ""; pa=di[0].get('address','') if di else ""; pm=di[0].get('mobile_no','') if di else ""
-                            else: pn,pa,pm=b.get('guest_name',''),b.get('guest_address',''),b.get('guest_mobile','')
-                            st.download_button("📥 PDF",data=generate_bill_pdf(b.get('bill_no',''),b.get('manual_bill_no',''),b.get('bill_book_no',''),b.get('bill_date',''),pn,pa,pm,b.get('pooja_type',''),b.get('amount',0)),file_name=f"Bill_{b.get('bill_no','')}.pdf",mime="application/pdf",key=f"p_{b['id']}")
+                                di=db_select("devotees",filters={"id":b['devotee_id']}); pn_=di[0]['name'] if di else ""; pa=di[0].get('address','') if di else ""; pm=di[0].get('mobile_no','') if di else ""
+                            else: pn_,pa,pm=b.get('guest_name',''),b.get('guest_address',''),b.get('guest_mobile','')
+                            st.download_button("📥 PDF",data=generate_bill_pdf(b.get('bill_no',''),b.get('manual_bill_no',''),b.get('bill_book_no',''),b.get('bill_date',''),pn_,pa,pm,b.get('pooja_type',''),b.get('amount',0)),file_name=f"Bill_{b.get('bill_no','')}.pdf",mime="application/pdf",key=f"p_{b['id']}")
                         except: pass
                 with hc2:
-                    if bwn: st.markdown(f'<a href="{make_whatsapp_link(bwn,f"🛕 {TEMPLE_NAME} - Bill: {b.get(chr(98)+chr(105)+chr(108)+chr(108)+chr(95)+chr(110)+chr(111),"")} Amount: Rs.{b.get(chr(97)+chr(109)+chr(111)+chr(117)+chr(110)+chr(116),0)}")}" target="_blank" class="wa-btn" style="font-size:0.8em;padding:5px 10px">📲</a>',unsafe_allow_html=True)
+                    if bwn:
+                        wmsg=f"🛕 {TEMPLE_NAME} - Bill: {b.get('bill_no','')} Amount: Rs.{b.get('amount',0)}"
+                        st.markdown(f'<a href="{make_whatsapp_link(bwn,wmsg)}" target="_blank" class="wa-btn" style="font-size:0.8em;padding:5px 10px">📲</a>',unsafe_allow_html=True)
                 with hc3:
                     if st.session_state.user_role=='admin':
                         if st.button("🗑️",key=f"db_{b['id']}"): db_delete("bills","id",b['id']); st.rerun()
 
-
 # ============================================================
-# PAGE: EXPENSES (with Delete option)
+# PAGE: EXPENSES (with Delete)
 # ============================================================
 def page_expenses():
-    st.markdown('<div class="main-header"><h1>💸 Expenses</h1><p>Track expenses</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>💸 Expenses</h1><p>Track expenses</p></div>',unsafe_allow_html=True)
     t1,t2=st.tabs(["➕ Add","📋 History"])
     with t1:
         with st.form("ef",clear_on_submit=True):
@@ -1129,75 +764,40 @@ def page_expenses():
     with t2:
         exps=sorted(db_select("expenses"),key=lambda x:x.get('expense_date',''),reverse=True)
         if exps:
-            total_exp = sum(float(e.get('amount',0)) for e in exps)
-            st.metric("Total Expenses",f"₹ {total_exp:,.2f}")
+            st.metric("Total",f"₹ {sum(float(e.get('amount',0)) for e in exps):,.2f}")
             st.markdown("---")
-            
-            # ---- Delete All option (Admin only) ----
-            if st.session_state.user_role == 'admin':
-                with st.expander("🗑️ Bulk Delete Options"):
-                    st.warning("⚠️ These actions cannot be undone!")
-                    dc1, dc2 = st.columns(2)
-                    with dc1:
-                        if st.button("🗑️ Delete ALL Expenses", type="primary", use_container_width=True, key="del_all_exp"):
-                            st.session_state['confirm_del_all_exp'] = True
-                    if st.session_state.get('confirm_del_all_exp', False):
-                        st.error("⚠️ Are you sure? This will delete ALL expense records!")
-                        cc1, cc2 = st.columns(2)
+            if st.session_state.user_role=='admin':
+                with st.expander("🗑️ Bulk Delete"):
+                    st.warning("⚠️ Cannot be undone!")
+                    if st.button("🗑️ Delete ALL",type="primary",use_container_width=True,key="del_all_exp"):
+                        st.session_state['confirm_del_all_exp']=True
+                    if st.session_state.get('confirm_del_all_exp',False):
+                        st.error("⚠️ Sure? Delete ALL expenses?")
+                        cc1,cc2=st.columns(2)
                         with cc1:
-                            if st.button("✅ Yes, Delete All", key="confirm_yes_exp", use_container_width=True):
-                                deleted = 0
-                                for e in exps:
-                                    if db_delete("expenses", "id", e['id']):
-                                        deleted += 1
-                                st.session_state['confirm_del_all_exp'] = False
-                                st.success(f"✅ Deleted {deleted} expense records!")
-                                time.sleep(0.5)
-                                st.rerun()
+                            if st.button("✅ Yes",key="cye",use_container_width=True):
+                                for e in exps: db_delete("expenses","id",e['id'])
+                                st.session_state['confirm_del_all_exp']=False; st.rerun()
                         with cc2:
-                            if st.button("❌ Cancel", key="confirm_no_exp", use_container_width=True):
-                                st.session_state['confirm_del_all_exp'] = False
-                                st.rerun()
-            
-            # ---- Individual Expense Cards with Delete ----
+                            if st.button("❌ No",key="cne",use_container_width=True): st.session_state['confirm_del_all_exp']=False; st.rerun()
             for e in exps:
-                with st.container():
-                    ec1, ec2, ec3, ec4, ec5 = st.columns([2, 2, 2, 3, 1])
-                    with ec1:
-                        st.markdown(f"📅 **{e.get('expense_date','')}**")
-                    with ec2:
-                        st.markdown(f"🏷️ {e.get('expense_type','')}")
-                    with ec3:
-                        st.markdown(f"💰 **₹{float(e.get('amount',0)):,.2f}**")
-                    with ec4:
-                        desc = e.get('description','')
-                        if desc:
-                            st.markdown(f"📝 {desc[:50]}{'...' if len(str(desc))>50 else ''}")
-                        else:
-                            st.markdown("📝 —")
-                    with ec5:
-                        if st.button("🗑️", key=f"del_exp_{e['id']}", help="Delete this expense"):
-                            db_delete("expenses", "id", e['id'])
-                            st.rerun()
-                    st.markdown("<hr style='margin:2px 0;border:none;border-top:1px solid #eee;'>", unsafe_allow_html=True)
-            
-            # ---- Download as CSV ----
+                ec1,ec2,ec3,ec4,ec5=st.columns([2,2,2,3,1])
+                with ec1: st.markdown(f"📅 **{e.get('expense_date','')}**")
+                with ec2: st.markdown(f"🏷️ {e.get('expense_type','')}")
+                with ec3: st.markdown(f"💰 **₹{float(e.get('amount',0)):,.2f}**")
+                with ec4: desc=e.get('description',''); st.markdown(f"📝 {desc[:50]}{'...' if len(str(desc))>50 else ''}" if desc else "📝 —")
+                with ec5:
+                    if st.button("🗑️",key=f"de_{e['id']}",help="Delete"): db_delete("expenses","id",e['id']); st.rerun()
+                st.markdown("<hr style='margin:2px 0;border:none;border-top:1px solid #eee;'>",unsafe_allow_html=True)
             st.markdown("---")
-            exp_df = pd.DataFrame([{
-                "Date": e.get('expense_date',''),
-                "Type": e.get('expense_type',''),
-                "Amount": float(e.get('amount',0)),
-                "Description": e.get('description','')
-            } for e in exps])
-            st.download_button("📥 Download Expenses CSV", exp_df.to_csv(index=False), "expenses.csv", "text/csv", use_container_width=True)
-        else:
-            st.info("📭 No expenses recorded yet.")
+            st.download_button("📥 CSV",pd.DataFrame([{"Date":e.get('expense_date',''),"Type":e.get('expense_type',''),"Amount":float(e.get('amount',0)),"Desc":e.get('description','')} for e in exps]).to_csv(index=False),"expenses.csv","text/csv",use_container_width=True)
+        else: st.info("📭 No expenses yet.")
 
 # ============================================================
 # PAGE: REPORTS
 # ============================================================
 def page_reports():
-    st.markdown('<div class="main-header"><h1>📊 Reports</h1><p>Financial reports</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>📊 Reports</h1><p>Financial reports</p></div>',unsafe_allow_html=True)
     rc1,rc2,rc3=st.columns(3)
     with rc1: period=st.selectbox("Period",["Daily","Weekly","Monthly","Yearly","Custom"])
     t=date.today()
@@ -1205,8 +805,7 @@ def page_reports():
         with rc2: sd=st.date_input("From",value=t-timedelta(30))
         with rc3: ed=st.date_input("To",value=t)
     else: sd,ed=get_period_dates(period)
-    ptn=["All"]+[p['name'] for p in db_select("pooja_types","name")]
-    pf=st.selectbox("Pooja Filter",ptn)
+    ptn=["All"]+[p['name'] for p in db_select("pooja_types","name")]; pf=st.selectbox("Pooja Filter",ptn)
     bills=db_select("bills",gte_filters={"bill_date":sd},lte_filters={"bill_date":ed})
     exps=db_select("expenses",gte_filters={"expense_date":sd},lte_filters={"expense_date":ed})
     if pf!="All": bills=[b for b in bills if b.get('pooja_type')==pf]
@@ -1225,12 +824,11 @@ def page_reports():
     with rt3:
         if bills or exps: st.bar_chart(pd.DataFrame({"Cat":["Income","Expenses"],"₹":[ti,te]}).set_index("Cat"))
 
-
 # ============================================================
 # PAGE: ASSETS
 # ============================================================
 def page_assets():
-    st.markdown('<div class="main-header"><h1>🏷️ Assets</h1><p>Manage</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>🏷️ Assets</h1><p>Manage</p></div>',unsafe_allow_html=True)
     t1,t2=st.tabs(["➕ Add","📋 List"])
     with t1:
         with st.form("af",clear_on_submit=True):
@@ -1247,13 +845,13 @@ def page_assets():
                 if a.get('image_url') and a['image_url'].startswith('data:'): st.markdown(f'<img src="{a["image_url"]}" width="130" style="border-radius:10px">',unsafe_allow_html=True)
                 if st.button("🗑️",key=f"da_{a['id']}"): db_delete("assets","id",a['id']); st.rerun()
 
-
 # ============================================================
-# PAGE: SETTINGS
+# PAGE: SETTINGS (with Appearance tab for Amman + Background)
 # ============================================================
 def page_settings():
-    st.markdown('<div class="main-header"><h1>⚙️ Settings</h1><p>Configuration</p></div>', unsafe_allow_html=True)
-    t1,t2,t3=st.tabs(["🙏 Pooja","💸 Expense","📢 News"])
+    st.markdown('<div class="main-header"><h1>⚙️ Settings</h1><p>Configuration</p></div>',unsafe_allow_html=True)
+    t1,t2,t3,t4=st.tabs(["🙏 Pooja","💸 Expense","📢 News","🖼️ Appearance"])
+
     with t1:
         for p in db_select("pooja_types"):
             c1,c2=st.columns([5,1])
@@ -1264,18 +862,20 @@ def page_settings():
             c1,c2=st.columns(2)
             with c1: nn=st.text_input("Name")
             with c2: na=st.number_input("Amount",min_value=0.0,step=10.0)
-            if st.form_submit_button("➕"): 
+            if st.form_submit_button("➕"):
                 if nn.strip(): db_insert("pooja_types",{"name":nn.strip(),"amount":na}); st.rerun()
+
     with t2:
         for e in db_select("expense_types"):
             c1,c2=st.columns([5,1])
             with c1: st.write(f"💸 **{e['name']}**")
             with c2:
-                if st.button("🗑️",key=f"de_{e['id']}"): db_delete("expense_types","id",e['id']); st.rerun()
+                if st.button("🗑️",key=f"det_{e['id']}"): db_delete("expense_types","id",e['id']); st.rerun()
         with st.form("aet",clear_on_submit=True):
             nn=st.text_input("Name")
             if st.form_submit_button("➕"):
                 if nn.strip(): db_insert("expense_types",{"name":nn.strip()}); st.rerun()
+
     with t3:
         for n in db_select("news_ticker"):
             c1,c2,c3=st.columns([4,1,1])
@@ -1289,12 +889,106 @@ def page_settings():
             if st.form_submit_button("➕"):
                 if nm.strip(): db_insert("news_ticker",{"message":nm.strip(),"is_active":True}); st.rerun()
 
+    # ========== APPEARANCE TAB (Amman Photo + Background) ==========
+    with t4:
+        if st.session_state.user_role != 'admin':
+            st.warning("⚠️ Only admin can change appearance."); return
+
+        st.markdown("### 🖼️ Appearance Settings")
+        st.markdown("---")
+
+        # ---- AMMAN PHOTO SECTION ----
+        st.markdown("#### 🙏 Amman Photo")
+        st.caption("Appears on Login, Dashboard, Sidebar & PDF Bills. Saved permanently in database.")
+        ac1, ac2 = st.columns([1, 2])
+        with ac1:
+            cur = get_amman_image()
+            st.markdown(f'<div class="settings-photo-preview"><img src="{cur}" alt="Amman"><p style="color:#666;font-size:0.8em;margin-top:5px;">Current</p></div>', unsafe_allow_html=True)
+        with ac2:
+            custom_exists = load_setting("custom_amman_photo")
+            if custom_exists: st.success("✅ Custom Amman photo active (saved in DB)")
+            else: st.info("ℹ️ Using default Amman photo")
+
+            new_amman = st.file_uploader("📷 Upload Amman Photo (JPG/PNG)", type=['jpg','jpeg','png'], key="set_amman", help="Square 300x300px+ recommended")
+            if new_amman:
+                preview = file_to_base64(new_amman)
+                st.markdown(f'<div style="text-align:center;margin:10px 0;"><p style="font-weight:600;color:#ff6b35;">Preview:</p><img src="{preview}" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #ff6b35;"></div>', unsafe_allow_html=True)
+                if st.button("✅ Save Amman Photo", key="save_amman", use_container_width=True, type="primary"):
+                    with st.spinner("Saving..."):
+                        if save_setting("custom_amman_photo", preview):
+                            st.success("✅ Saved permanently!"); time.sleep(0.5); st.rerun()
+                        else: st.error("❌ Save failed.")
+
+            if custom_exists:
+                st.markdown("---")
+                if st.button("🔄 Reset to Default Photo", key="reset_amman", use_container_width=True):
+                    st.session_state['conf_reset_amman'] = True
+                if st.session_state.get('conf_reset_amman', False):
+                    st.warning("⚠️ Remove custom and restore default?")
+                    r1, r2 = st.columns(2)
+                    with r1:
+                        if st.button("✅ Yes", key="yr_amman", use_container_width=True):
+                            delete_setting("custom_amman_photo"); st.session_state['conf_reset_amman'] = False; st.rerun()
+                    with r2:
+                        if st.button("❌ No", key="nr_amman", use_container_width=True):
+                            st.session_state['conf_reset_amman'] = False; st.rerun()
+
+        st.markdown("---")
+
+        # ---- LOGIN BACKGROUND SECTION ----
+        st.markdown("#### 🎨 Login Page Background")
+        st.caption("Custom background image for the login page. Saved permanently in database.")
+        bc1, bc2 = st.columns([1, 2])
+        with bc1:
+            custom_bg = load_setting("custom_login_bg")
+            if custom_bg and custom_bg.startswith('data:'):
+                st.markdown(f'<div class="settings-bg-preview"><img src="{custom_bg}" alt="BG"><p style="color:#666;font-size:0.8em;margin-top:5px;text-align:center;">Current</p></div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div style="width:100%;height:100px;border-radius:10px;border:2px dashed #ff6b35;background:linear-gradient(135deg,#fff5ee,#ffe4c4,#ffdab9);display:flex;align-items:center;justify-content:center;"><p style="color:#666;font-size:0.8em;margin:0;">Default Gradient</p></div>', unsafe_allow_html=True)
+        with bc2:
+            if custom_bg and custom_bg.startswith('data:'): st.success("✅ Custom background active (saved in DB)")
+            else: st.info("ℹ️ Using default gradient")
+
+            new_bg = st.file_uploader("🖼️ Upload Background (JPG/PNG)", type=['jpg','jpeg','png'], key="set_bg", help="1920x1080px+ recommended")
+            if new_bg:
+                preview_bg = file_to_base64(new_bg)
+                st.markdown(f'<div style="margin:10px 0;"><p style="font-weight:600;color:#ff6b35;">Preview:</p><img src="{preview_bg}" style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;border:2px solid #ff6b35;"></div>', unsafe_allow_html=True)
+                if st.button("✅ Save Background", key="save_bg", use_container_width=True, type="primary"):
+                    with st.spinner("Saving..."):
+                        if save_setting("custom_login_bg", preview_bg):
+                            st.success("✅ Saved permanently!"); time.sleep(0.5); st.rerun()
+                        else: st.error("❌ Save failed.")
+
+            if custom_bg and custom_bg.startswith('data:'):
+                st.markdown("---")
+                if st.button("🔄 Reset to Default BG", key="reset_bg", use_container_width=True):
+                    st.session_state['conf_reset_bg'] = True
+                if st.session_state.get('conf_reset_bg', False):
+                    st.warning("⚠️ Remove custom background?")
+                    r1, r2 = st.columns(2)
+                    with r1:
+                        if st.button("✅ Yes", key="yr_bg", use_container_width=True):
+                            delete_setting("custom_login_bg"); st.session_state['conf_reset_bg'] = False; st.rerun()
+                    with r2:
+                        if st.button("❌ No", key="nr_bg", use_container_width=True):
+                            st.session_state['conf_reset_bg'] = False; st.rerun()
+
+        st.markdown("---")
+        st.markdown("""
+        <div style="background:#fff3cd;padding:15px;border-radius:10px;border-left:4px solid #ffc107;">
+            <p style="margin:0;font-size:0.85em;">💡 <b>Tips:</b><br>
+            • Photos are saved in <b>Supabase database</b> — they persist forever across sessions & devices<br>
+            • Amman photo: Square image (300x300px+) for best circle display<br>
+            • Background: Wide image (1920x1080px) for full coverage<br>
+            • All users see updated photos after page refresh</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ============================================================
 # PAGE: USERS
 # ============================================================
 def page_users():
-    st.markdown('<div class="main-header"><h1>👥 Users</h1><p>Manage</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>👥 Users</h1><p>Manage</p></div>',unsafe_allow_html=True)
     if st.session_state.user_role!='admin': st.error("Admin only!"); return
     t1,t2=st.tabs(["➕ Create","📋 List"])
     with t1:
@@ -1312,12 +1006,11 @@ def page_users():
                 if u['username']!='admin':
                     if st.button("🗑️",key=f"du_{u['id']}"): db_delete("users","id",u['id']); st.rerun()
 
-
 # ============================================================
 # PAGE: SAMAYA VAKUPPU
 # ============================================================
 def page_samaya():
-    st.markdown('<div class="main-header"><h1>📚 Samaya Vakuppu</h1><p>Students</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>📚 Samaya Vakuppu</h1><p>Students</p></div>',unsafe_allow_html=True)
     t1,t2=st.tabs(["➕ Add","📋 List"])
     with t1:
         with st.form("sv",clear_on_submit=True):
@@ -1332,12 +1025,11 @@ def page_samaya():
                 for l,k in [("Name","student_name"),("DOB","dob"),("Address","address"),("Parent","parent_name"),("Bond","bond_no")]: st.write(f"**{l}:** {s.get(k,'N/A')}")
                 if st.button("🗑️",key=f"ds_{s['id']}"): db_delete("samaya_vakuppu","id",s['id']); st.rerun()
 
-
 # ============================================================
 # PAGE: THIRUMANA MANDAPAM
 # ============================================================
 def page_thirumana():
-    st.markdown('<div class="main-header"><h1>💒 Thirumana Mandapam</h1><p>Bonds</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>💒 Thirumana Mandapam</h1><p>Bonds</p></div>',unsafe_allow_html=True)
     t1,t2=st.tabs(["➕ Add","📋 List"])
     with t1:
         with st.form("tm",clear_on_submit=True):
@@ -1352,27 +1044,19 @@ def page_thirumana():
                 for l,k in [("Name","name"),("Address","address"),("Bond","bond_no"),("Date","bond_issued_date"),("Amount","amount")]: st.write(f"**{l}:** {r.get(k,'N/A')}")
                 if st.button("🗑️",key=f"dt_{r['id']}"): db_delete("thirumana_mandapam","id",r['id']); st.rerun()
 
-
 # ============================================================
-# SIDEBAR (with permanent Amman photo)
+# SIDEBAR
 # ============================================================
 def render_sidebar():
     with st.sidebar:
-        # Amman photo in sidebar
         amman_img = get_amman_image()
         st.markdown(f"""
-        <div class="sidebar-amman">
-            <img src="{amman_img}" alt="Amman">
-        </div>
+        <div class="sidebar-amman"><img src="{amman_img}" alt="Amman"></div>
         <div style="text-align:center;padding:5px;background:linear-gradient(135deg,#ff6b35,#f7c948);border-radius:8px;margin-bottom:10px;">
-            <p style="color:#5a1a00;margin:0;font-weight:600;font-size:0.7em;">{TEMPLE_NAME}<br>Temple Management</p>
-        </div>
-        <div style="color:#ccc;padding:3px 10px;font-size:0.8em;">
-            👤 <b style="color:#f7c948">{st.session_state.username}</b> ({st.session_state.user_role})
-        </div>
+            <p style="color:#5a1a00;margin:0;font-weight:600;font-size:0.7em;">{TEMPLE_NAME}<br>Temple Management</p></div>
+        <div style="color:#ccc;padding:3px 10px;font-size:0.8em;">👤 <b style="color:#f7c948">{st.session_state.username}</b> ({st.session_state.user_role})</div>
         """, unsafe_allow_html=True)
         st.markdown("---")
-
         pages=[("🏠 Dashboard","Dashboard"),("👥 Devotees","Devotees"),("🧾 Billing","Billing"),
                ("💸 Expenses","Expenses"),("📊 Reports","Reports"),("🏷️ Assets","Assets"),
                ("📚 Samaya Vakuppu","Samaya"),("💒 Thirumana","Thirumana"),
@@ -1381,15 +1065,11 @@ def render_sidebar():
             if p=="Users" and st.session_state.user_role!='admin': continue
             if st.button(l,key=f"n_{p}",use_container_width=True):
                 st.session_state.current_page=p; st.rerun()
-
         st.markdown("---")
         if st.button("🚪 Logout",key="lo",use_container_width=True):
-            for k in ['logged_in','username','user_role','current_page']:
-                st.session_state[k]=defaults[k]
+            for k in ['logged_in','username','user_role','current_page']: st.session_state[k]=defaults[k]
             st.rerun()
-
-        st.markdown(f'<div style="text-align:center;padding:15px 0;color:#555;font-size:0.65em;">v2.3 🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</div>',unsafe_allow_html=True)
-
+        st.markdown(f'<div style="text-align:center;padding:15px 0;color:#555;font-size:0.65em;">v3.0 🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</div>',unsafe_allow_html=True)
 
 # ============================================================
 # MAIN
