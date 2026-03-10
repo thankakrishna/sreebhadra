@@ -38,72 +38,201 @@ except Exception as e:
     st.error(f"Database connection failed: {str(e)}")
 
 # ============================================================
-# PDF GENERATION
+# TEMPLE ADDRESS CONSTANT
+# ============================================================
+TEMPLE_NAME = "Sree Bhadreshwari Amman Temple"
+TEMPLE_TRUST = "Samrakshana Seva Trust 179/2004"
+TEMPLE_ADDRESS_LINE1 = "Kanjampuram, Kanniyakumari Dist.,"
+TEMPLE_PINCODE = "629154"
+TEMPLE_FULL_ADDRESS = f"{TEMPLE_NAME}, {TEMPLE_TRUST}, {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}"
+TEMPLE_TAGLINE = "Amme Narayana .. Devi Narayana"
+TEMPLE_TAGLINE_TAMIL = "அம்மே நாராயணா ..தேவி நாராயணா"
+
+# ============================================================
+# PDF GENERATION (with Amman image + full address)
 # ============================================================
 PDF_AVAILABLE = False
 try:
     from fpdf import FPDF
+    import requests
+    import tempfile
+    import os
+
+    # Download and cache Amman image for PDF
+    @st.cache_data(ttl=86400)
+    def get_amman_image_for_pdf():
+        """Download Amman image and return temp file path for PDF embedding"""
+        try:
+            # Try to use custom uploaded photo first (base64)
+            if st.session_state.get('custom_amman_photo'):
+                b64_data = st.session_state['custom_amman_photo']
+                if ',' in b64_data:
+                    b64_data = b64_data.split(',')[1]
+                img_bytes = base64.b64decode(b64_data)
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                tmp.write(img_bytes)
+                tmp.close()
+                return tmp.name
+        except:
+            pass
+        
+        # Use default Amman image URL
+        try:
+            url = "https://novellum-filestore-mcp.s3.us-east-2.amazonaws.com/atxp:atxp_acct_EaWscsITrvle1aqYknSBl/7da491a3-7fa2-4542-b6f6-8dd3babc1861.png"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                tmp.write(response.content)
+                tmp.close()
+                return tmp.name
+        except:
+            pass
+        return None
 
     class BillPDF(FPDF):
+        def __init__(self, amman_img_path=None):
+            super().__init__()
+            self.amman_img_path = amman_img_path
+
         def header(self):
+            # ---- Amman Image centered at top ----
+            if self.amman_img_path and os.path.exists(self.amman_img_path):
+                try:
+                    # Center the image: page width=210, image width=25
+                    img_x = (210 - 25) / 2
+                    self.image(self.amman_img_path, x=img_x, y=8, w=25, h=25)
+                    self.ln(28)
+                except Exception:
+                    self.ln(5)
+            else:
+                self.ln(5)
+
+            # ---- Temple Name ----
             self.set_font('Helvetica', 'B', 16)
-            self.cell(0, 10, 'Sree Bhadreshwari Amman Temple', 0, 1, 'C')
-            self.set_font('Helvetica', '', 10)
-            self.cell(0, 6, 'Amme Narayana .. Devi Narayana', 0, 1, 'C')
+            self.set_text_color(139, 0, 0)  # Dark red
+            self.cell(0, 8, TEMPLE_NAME, 0, 1, 'C')
+
+            # ---- Trust Name ----
+            self.set_font('Helvetica', 'B', 10)
+            self.set_text_color(80, 80, 80)
+            self.cell(0, 6, TEMPLE_TRUST, 0, 1, 'C')
+
+            # ---- Address ----
+            self.set_font('Helvetica', '', 9)
+            self.set_text_color(100, 100, 100)
+            self.cell(0, 5, f"{TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}", 0, 1, 'C')
+
+            # ---- Tagline ----
+            self.set_font('Helvetica', 'I', 9)
+            self.set_text_color(200, 100, 0)
+            self.cell(0, 6, TEMPLE_TAGLINE, 0, 1, 'C')
+
+            # ---- Divider line ----
+            self.set_draw_color(255, 107, 53)
+            self.set_line_width(0.8)
             self.line(10, self.get_y() + 2, 200, self.get_y() + 2)
-            self.ln(5)
+            self.ln(6)
+            self.set_text_color(0, 0, 0)
 
         def footer(self):
-            self.set_y(-25)
+            self.set_y(-30)
+            self.set_draw_color(255, 107, 53)
+            self.set_line_width(0.5)
             self.line(10, self.get_y(), 200, self.get_y())
             self.ln(3)
             self.set_font('Helvetica', 'I', 8)
-            self.cell(0, 5, 'Thank you for your contribution! May Goddess bless you!', 0, 1, 'C')
-            self.cell(0, 5, 'Amme Narayana .. Devi Narayana', 0, 1, 'C')
+            self.set_text_color(100, 100, 100)
+            self.cell(0, 5, 'Thank you for your contribution! May Goddess Bhadreshwari bless you!', 0, 1, 'C')
+            self.set_font('Helvetica', 'I', 9)
+            self.set_text_color(200, 100, 0)
+            self.cell(0, 5, TEMPLE_TAGLINE, 0, 1, 'C')
+            self.set_font('Helvetica', '', 7)
+            self.set_text_color(150, 150, 150)
+            self.cell(0, 5, TEMPLE_FULL_ADDRESS, 0, 1, 'C')
 
     def generate_bill_pdf(bill_no, manual_bill, bill_book, bill_date,
                           name, address, mobile, pooja_type, amount):
-        pdf = BillPDF()
+        amman_img_path = get_amman_image_for_pdf()
+        pdf = BillPDF(amman_img_path=amman_img_path)
         pdf.add_page()
-        pdf.set_auto_page_break(auto=True, margin=30)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.set_fill_color(255, 248, 240)
+        pdf.set_auto_page_break(auto=True, margin=35)
+
+        # ---- BILL HEADER SECTION ----
+        pdf.set_font('Helvetica', 'B', 13)
+        pdf.set_text_color(139, 0, 0)
+        pdf.cell(0, 8, 'BILL / RECEIPT', 0, 1, 'C')
+        pdf.ln(3)
+        pdf.set_text_color(0, 0, 0)
+
+        # ---- Bill Info Box ----
         y_start = pdf.get_y()
-        pdf.rect(10, y_start, 190, 90, 'D')
-        pdf.set_xy(15, y_start + 5)
-        pdf.set_font('Helvetica', 'B', 12)
-        pdf.cell(0, 7, 'BILL / RECEIPT', 0, 1, 'C')
-        pdf.ln(3)
-        for label, value in [("Bill No", str(bill_no or '')), ("Manual Bill No", str(manual_bill or '')),
-                              ("Bill Book No", str(bill_book or '')), ("Date", str(bill_date or ''))]:
-            pdf.set_x(15)
-            pdf.set_font('Helvetica', 'B', 10)
-            pdf.cell(45, 7, f"{label}:", 0, 0)
-            pdf.set_font('Helvetica', '', 10)
-            pdf.cell(0, 7, value, 0, 1)
-        pdf.ln(2)
-        pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-        pdf.ln(3)
+        pdf.set_draw_color(255, 107, 53)
+        pdf.set_line_width(0.5)
+        pdf.rect(12, y_start, 186, 30, 'D')
+        pdf.set_xy(15, y_start + 3)
+
+        # Bill details in two columns
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.cell(35, 6, "Bill No:", 0, 0)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.cell(55, 6, str(bill_no or ''), 0, 0)
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.cell(35, 6, "Manual Bill No:", 0, 0)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.cell(0, 6, str(manual_bill or ''), 0, 1)
+
+        pdf.set_x(15)
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.cell(35, 6, "Bill Book No:", 0, 0)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.cell(55, 6, str(bill_book or ''), 0, 0)
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.cell(35, 6, "Date:", 0, 0)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.cell(0, 6, str(bill_date or ''), 0, 1)
+
+        pdf.set_y(y_start + 33)
+
+        # ---- Devotee Info Box ----
+        y2 = pdf.get_y()
+        pdf.set_fill_color(255, 248, 240)
+        pdf.rect(12, y2, 186, 28, 'DF')
+        pdf.set_xy(15, y2 + 3)
+
         for label, value in [("Name", str(name or '')), ("Address", str(address or '')), ("Mobile", str(mobile or ''))]:
             pdf.set_x(15)
             pdf.set_font('Helvetica', 'B', 10)
-            pdf.cell(45, 7, f"{label}:", 0, 0)
+            pdf.cell(35, 7, f"{label}:", 0, 0)
             pdf.set_font('Helvetica', '', 10)
             pdf.cell(0, 7, value, 0, 1)
+
         pdf.ln(5)
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+
+        # ---- Pooja & Amount Section ----
+        pdf.set_draw_color(200, 200, 200)
+        pdf.line(12, pdf.get_y(), 198, pdf.get_y())
         pdf.ln(5)
-        pdf.set_font('Helvetica', 'B', 11)
+
         pdf.set_x(15)
-        pdf.cell(45, 8, "Pooja Type:", 0, 0)
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(35, 8, "Pooja Type:", 0, 0)
         pdf.set_font('Helvetica', '', 11)
         pdf.cell(0, 8, str(pooja_type or ''), 0, 1)
-        pdf.set_font('Helvetica', 'B', 14)
+
+        pdf.ln(3)
         pdf.set_x(15)
-        pdf.cell(45, 10, "Amount:", 0, 0)
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.cell(35, 10, "Amount:", 0, 0)
         pdf.set_text_color(0, 128, 0)
+        pdf.set_font('Helvetica', 'B', 16)
         pdf.cell(0, 10, f"Rs. {float(amount):,.2f}", 0, 1)
         pdf.set_text_color(0, 0, 0)
+
+        pdf.ln(5)
+        pdf.set_draw_color(255, 107, 53)
+        pdf.set_line_width(0.3)
+        pdf.line(12, pdf.get_y(), 198, pdf.get_y())
+
         return bytes(pdf.output())
 
     PDF_AVAILABLE = True
@@ -203,6 +332,44 @@ st.markdown("""
     .main-header h1 { color: #8B0000; font-size: 1.8em; margin: 0; }
     .main-header p { color: #5a1a00; font-size: 1em; margin: 5px 0 0 0; }
     
+    .dashboard-banner {
+        background: linear-gradient(135deg, #ff6b35 0%, #f7c948 30%, #ff8c42 60%, #f7c948 80%, #ff6b35 100%);
+        padding: 25px 20px; border-radius: 18px; text-align: center;
+        margin-bottom: 20px; box-shadow: 0 6px 20px rgba(255,107,53,0.35);
+        border: 2px solid rgba(139,0,0,0.15);
+        position: relative;
+        overflow: hidden;
+    }
+    .dashboard-banner::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(ellipse at center, rgba(255,255,255,0.15) 0%, transparent 70%);
+        pointer-events: none;
+    }
+    .dashboard-banner .temple-name {
+        color: #8B0000; font-size: 1.9em; font-weight: 700;
+        margin: 0; text-shadow: 1px 1px 3px rgba(255,255,255,0.5);
+        letter-spacing: 0.5px;
+    }
+    .dashboard-banner .trust-name {
+        color: #5a1a00; font-size: 1.05em; font-weight: 600;
+        margin: 5px 0 2px 0;
+    }
+    .dashboard-banner .address-line {
+        color: #4a2000; font-size: 0.92em; font-weight: 500;
+        margin: 2px 0;
+    }
+    .dashboard-banner .tagline {
+        color: #8B0000; font-size: 1.05em; font-weight: 600;
+        margin: 8px 0 0 0;
+        letter-spacing: 1px;
+    }
+    .dashboard-banner .divider {
+        width: 60%; height: 2px; margin: 10px auto;
+        background: linear-gradient(90deg, transparent, #8B0000, transparent);
+    }
+    
     .login-page-bg {
         background: linear-gradient(135deg, #fff5ee 0%, #ffe4c4 25%, #ffdab9 50%, #ffe4c4 75%, #fff5ee 100%);
         min-height: 100vh;
@@ -242,6 +409,16 @@ st.markdown("""
                         0 0 50px rgba(247,201,72,0.2);
             border-color: #ff6b35;
         }
+    }
+    
+    .dashboard-amman-circle {
+        text-align: center; margin: 0 auto 10px auto;
+    }
+    .dashboard-amman-circle img {
+        width: 90px; height: 90px; border-radius: 50%;
+        object-fit: cover; border: 4px solid #8B0000;
+        box-shadow: 0 0 20px rgba(255,107,53,0.5),
+                    0 0 40px rgba(247,201,72,0.25);
     }
     
     .sidebar-amman {
@@ -576,13 +753,17 @@ def page_login():
         </div>
         """, unsafe_allow_html=True)
         
-        # Temple Name
-        st.markdown("""
+        # Temple Name with full address
+        st.markdown(f"""
         <div class="temple-name-login">
-            🛕 Sree Bhadreshwari Amman Temple<br>Management System
+            🛕 {TEMPLE_NAME}<br>Management System
+        </div>
+        <div style="text-align:center;color:#5a1a00;font-size:0.85em;font-weight:500;margin:-10px 0 5px 0;">
+            {TEMPLE_TRUST}<br>
+            {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}
         </div>
         <div class="tamil-text">
-            🙏 அம்மே நாராயணா ..தேவி நாராயணா 🙏
+            🙏 {TEMPLE_TAGLINE_TAMIL} 🙏
         </div>
         """, unsafe_allow_html=True)
 
@@ -627,20 +808,27 @@ def page_login():
 
 
 # ============================================================
-# PAGE: DASHBOARD
+# PAGE: DASHBOARD (with full address banner + Amman image)
 # ============================================================
 def page_dashboard():
-    st.markdown("""
-    <div class="main-header">
-        <h1>🛕 Sree Bhadreshwari Amman Temple</h1>
-        <p>🙏 அம்மே நாராயணா ..தேவி நாராயணா 🙏</p>
+    amman_img = get_amman_image()
+    st.markdown(f"""
+    <div class="dashboard-banner">
+        <div class="dashboard-amman-circle">
+            <img src="{amman_img}" alt="Sree Bhadreshwari Amman">
+        </div>
+        <div class="temple-name">🛕 {TEMPLE_NAME}</div>
+        <div class="trust-name">{TEMPLE_TRUST}</div>
+        <div class="address-line">📍 {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}</div>
+        <div class="divider"></div>
+        <div class="tagline">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</div>
     </div>""", unsafe_allow_html=True)
 
     tparts = get_todays_birthdays()
     for n in db_select("news_ticker", filters={"is_active": True}):
         tparts.append(f"📢 {n['message']}")
     if not tparts:
-        tparts.append("🛕 Welcome to Sree Bhadreshwari Amman Temple! 🙏")
+        tparts.append(f"🛕 Welcome to {TEMPLE_NAME}! 🙏")
     st.markdown(f'<div class="news-ticker-wrapper"><div class="news-ticker-text">{" &nbsp;⭐&nbsp; ".join(tparts)}</div></div>', unsafe_allow_html=True)
 
     period = st.selectbox("📅 Period", ["Daily", "Weekly", "Monthly", "Yearly"])
@@ -851,12 +1039,21 @@ def page_billing():
                         di=db_select("devotees",filters={"id":did}); bn_=di[0]['name'] if di else "N/A"; ba=di[0].get('address','') if di else ""; bm=di[0].get('mobile_no','') if di else ""; bwn=di[0].get('whatsapp_no','') if di else ""
                     else: bn_,ba,bm,bwn=gn,ga,gm,gw
                     st.success(f"✅ Bill: {bn}")
+                    # On-screen bill with full temple address
                     st.markdown(f"""<div style="background:#fffdf7;padding:25px;border:2px solid #ff6b35;border-radius:15px;max-width:550px;margin:20px auto;">
-                        <div style="text-align:center;border-bottom:2px solid #ff6b35;padding-bottom:12px;"><h2 style="color:#8B0000;margin:0;">🛕 Sree Bhadreshwari Amman Temple</h2><p style="margin:3px 0;">🙏 அம்மே நாராயணா 🙏</p></div>
+                        <div style="text-align:center;border-bottom:2px solid #ff6b35;padding-bottom:12px;">
+                            <h2 style="color:#8B0000;margin:0;">🛕 {TEMPLE_NAME}</h2>
+                            <p style="margin:3px 0;color:#5a1a00;font-weight:600;font-size:0.9em;">{TEMPLE_TRUST}</p>
+                            <p style="margin:2px 0;color:#666;font-size:0.85em;">📍 {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}</p>
+                            <p style="margin:3px 0;color:#c0392b;font-size:0.9em;">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</p>
+                        </div>
                         <table style="width:100%;margin:15px 0;"><tr><td><b>Bill:</b></td><td>{bn}</td></tr><tr><td><b>Manual:</b></td><td>{mbl}</td></tr><tr><td><b>Book:</b></td><td>{bb}</td></tr><tr><td><b>Date:</b></td><td>{bd}</td></tr>
                         <tr><td colspan="2"><hr style="border:1px dashed #ccc"></td></tr><tr><td><b>Name:</b></td><td>{bn_}</td></tr><tr><td><b>Address:</b></td><td>{ba}</td></tr><tr><td><b>Mobile:</b></td><td>{bm}</td></tr>
                         <tr><td colspan="2"><hr style="border:1px dashed #ccc"></td></tr><tr><td><b>Pooja:</b></td><td>{pn}</td></tr><tr><td><b>Amount:</b></td><td style="font-size:1.4em;color:#11998e"><b>₹ {am:,.2f}</b></td></tr></table>
-                        <div style="text-align:center;border-top:2px solid #ff6b35;padding-top:10px;"><p style="color:#666;margin:0;">🙏 அம்மே நாராயணா ..தேவி நாராயணா 🙏</p></div></div>""",unsafe_allow_html=True)
+                        <div style="text-align:center;border-top:2px solid #ff6b35;padding-top:10px;">
+                            <p style="color:#666;margin:0;">🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</p>
+                            <p style="color:#999;margin:3px 0;font-size:0.75em;">{TEMPLE_FULL_ADDRESS}</p>
+                        </div></div>""",unsafe_allow_html=True)
                     st.markdown("---")
                     dl1,dl2=st.columns(2)
                     with dl1:
@@ -864,11 +1061,11 @@ def page_billing():
                             try:
                                 pdf=generate_bill_pdf(bn,mbl,bb,bd,bn_,ba,bm,pn,am)
                                 st.download_button("📥 Download PDF",data=pdf,file_name=f"Bill_{bn}.pdf",mime="application/pdf",use_container_width=True)
-                            except: st.warning("PDF error")
+                            except Exception as ex: st.warning(f"PDF error: {ex}")
                     with dl2:
                         wn=bwn or bm
                         if wn:
-                            msg=f"🛕 *Sree Bhadreshwari Amman Temple*\n🙏 அம்மே நாராயணா\n\nBill: {bn}\nDate: {bd}\nName: {bn_}\nPooja: {pn}\n*Amount: ₹ {am:,.2f}*\n\n🙏 Thank you!"
+                            msg=f"🛕 *{TEMPLE_NAME}*\n{TEMPLE_TRUST}\n{TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}\n🙏 {TEMPLE_TAGLINE}\n\nBill: {bn}\nDate: {bd}\nName: {bn_}\nPooja: {pn}\n*Amount: ₹ {am:,.2f}*\n\n🙏 Thank you!"
                             st.markdown(f'<a href="{make_whatsapp_link(wn,msg)}" target="_blank" class="wa-btn">📲 WhatsApp</a>',unsafe_allow_html=True)
     with tab2:
         for b in sorted(db_select("bills"),key=lambda x:x.get('created_at',''),reverse=True):
@@ -887,7 +1084,7 @@ def page_billing():
                             st.download_button("📥 PDF",data=generate_bill_pdf(b.get('bill_no',''),b.get('manual_bill_no',''),b.get('bill_book_no',''),b.get('bill_date',''),pn,pa,pm,b.get('pooja_type',''),b.get('amount',0)),file_name=f"Bill_{b.get('bill_no','')}.pdf",mime="application/pdf",key=f"p_{b['id']}")
                         except: pass
                 with hc2:
-                    if bwn: st.markdown(f'<a href="{make_whatsapp_link(bwn,f"Bill: {b.get(chr(98)+chr(105)+chr(108)+chr(108)+chr(95)+chr(110)+chr(111),"")} Amount: Rs.{b.get(chr(97)+chr(109)+chr(111)+chr(117)+chr(110)+chr(116),0)}")}" target="_blank" class="wa-btn" style="font-size:0.8em;padding:5px 10px">📲</a>',unsafe_allow_html=True)
+                    if bwn: st.markdown(f'<a href="{make_whatsapp_link(bwn,f"🛕 {TEMPLE_NAME} - Bill: {b.get(chr(98)+chr(105)+chr(108)+chr(108)+chr(95)+chr(110)+chr(111),"")} Amount: Rs.{b.get(chr(97)+chr(109)+chr(111)+chr(117)+chr(110)+chr(116),0)}")}" target="_blank" class="wa-btn" style="font-size:0.8em;padding:5px 10px">📲</a>',unsafe_allow_html=True)
                 with hc3:
                     if st.session_state.user_role=='admin':
                         if st.button("🗑️",key=f"db_{b['id']}"): db_delete("bills","id",b['id']); st.rerun()
@@ -1085,7 +1282,7 @@ def render_sidebar():
             <img src="{amman_img}" alt="Amman">
         </div>
         <div style="text-align:center;padding:5px;background:linear-gradient(135deg,#ff6b35,#f7c948);border-radius:8px;margin-bottom:10px;">
-            <p style="color:#5a1a00;margin:0;font-weight:600;font-size:0.7em;">Sree Bhadreshwari Amman<br>Temple Management</p>
+            <p style="color:#5a1a00;margin:0;font-weight:600;font-size:0.7em;">{TEMPLE_NAME}<br>Temple Management</p>
         </div>
         <div style="color:#ccc;padding:3px 10px;font-size:0.8em;">
             👤 <b style="color:#f7c948">{st.session_state.username}</b> ({st.session_state.user_role})
@@ -1108,7 +1305,7 @@ def render_sidebar():
                 st.session_state[k]=defaults[k]
             st.rerun()
 
-        st.markdown('<div style="text-align:center;padding:15px 0;color:#555;font-size:0.65em;">v2.2 🙏 அம்மே நாராயணா 🙏</div>',unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align:center;padding:15px 0;color:#555;font-size:0.65em;">v2.3 🙏 {TEMPLE_TAGLINE_TAMIL} 🙏</div>',unsafe_allow_html=True)
 
 
 # ============================================================
