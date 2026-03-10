@@ -20,29 +20,95 @@ st.set_page_config(
 )
 
 # ============================================================
-# GLOBAL CSS - HIDE WHITE HEADER BAR ON ALL PAGES
+# GLOBAL CSS - FORCE REMOVE WHITE HEADER BAR ON ALL PAGES
 # ============================================================
 st.markdown("""
 <style>
-    header[data-testid="stHeader"] {
+    /* === FORCE KILL ALL WHITE BARS AT TOP === */
+    header {
         display: none !important;
-        height: 0 !important;
         visibility: hidden !important;
+        height: 0px !important;
+        max-height: 0px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        z-index: -9999 !important;
     }
-    div[data-testid="stToolbar"] {
+    
+    /* Target every possible Streamlit header variant */
+    header[data-testid="stHeader"],
+    .stAppHeader,
+    div[data-testid="stHeader"],
+    section[data-testid="stHeader"],
+    .st-emotion-cache-h4xjwg,
+    .st-emotion-cache-18ni7ap,
+    .st-emotion-cache-1avcm0n,
+    .st-emotion-cache-uf99v8,
+    .st-emotion-cache-zq5wmm,
+    .st-emotion-cache-12fmjuu {
         display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
+        max-height: 0px !important;
+        min-height: 0px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        z-index: -9999 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        background: transparent !important;
     }
-    div[data-testid="stDecoration"] {
+    
+    /* Toolbar and decoration */
+    div[data-testid="stToolbar"],
+    div[data-testid="stDecoration"],
+    div[data-testid="stStatusWidget"],
+    .stDeployButton,
+    #MainMenu,
+    footer {
         display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
     }
-    div[data-testid="stStatusWidget"] {
-        display: none !important;
-    }
+    
+    /* Remove top gap/padding completely */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 0rem !important;
+        margin-top: 0rem !important;
     }
+    
+    .appview-container {
+        padding-top: 0px !important;
+        margin-top: 0px !important;
+    }
+    
+    .main .block-container {
+        padding-top: 0rem !important;
+        max-width: 100% !important;
+    }
+    
+    /* Remove gap at very top of page */
+    .stApp > div:first-child {
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+    }
+    
     section[data-testid="stSidebar"] > div:first-child {
         padding-top: 0.5rem !important;
+    }
+    
+    /* Force body/html no top space */
+    html, body, [data-testid="stAppViewContainer"] {
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+    }
+    
+    [data-testid="stAppViewContainer"] > div:first-child {
+        padding-top: 0px !important;
     }
 </style>
 """, unsafe_allow_html=True)
