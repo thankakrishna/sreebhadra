@@ -732,11 +732,35 @@ def process_bulk_upload(df):
 # PAGE: LOGIN (Permanent Amman Photo in Round)
 # ============================================================
 def page_login():
-    # Set login page background
+    # Set login page background + HIDE the white header bar
     st.markdown("""
     <style>
         .stApp {
             background: linear-gradient(135deg, #fff5ee 0%, #ffe4c4 25%, #ffdab9 50%, #ffe4c4 75%, #fff5ee 100%);
+        }
+        /* HIDE the white top header/toolbar bar */
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            border-bottom: none !important;
+            box-shadow: none !important;
+        }
+        /* Also hide the toolbar decoration */
+        div[data-testid="stToolbar"] {
+            display: none !important;
+        }
+        /* Hide the top decoration bar */
+        div[data-testid="stDecoration"] {
+            display: none !important;
+        }
+        /* Remove any top padding/margin from main block */
+        .block-container {
+            padding-top: 1rem !important;
+        }
+        /* Make the top status bar transparent */
+        div[data-testid="stStatusWidget"] {
+            display: none !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -805,7 +829,6 @@ def page_login():
         </div>
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
 
 # ============================================================
 # PAGE: DASHBOARD (with full address banner + Amman image)
