@@ -1091,7 +1091,7 @@ def page_billing():
 
 
 # ============================================================
-# PAGE: EXPENSES
+# PAGE: EXPENSES (with Delete option)
 # ============================================================
 def page_expenses():
     st.markdown('<div class="main-header"><h1>💸 Expenses</h1><p>Track expenses</p></div>', unsafe_allow_html=True)
@@ -1106,9 +1106,69 @@ def page_expenses():
     with t2:
         exps=sorted(db_select("expenses"),key=lambda x:x.get('expense_date',''),reverse=True)
         if exps:
-            st.metric("Total",f"₹ {sum(float(e.get('amount',0)) for e in exps):,.2f}")
-            st.dataframe(pd.DataFrame([{"Date":e.get('expense_date',''),"Type":e.get('expense_type',''),"Amount":f"₹{float(e.get('amount',0)):,.2f}","Desc":e.get('description','')} for e in exps]),use_container_width=True,hide_index=True)
-
+            total_exp = sum(float(e.get('amount',0)) for e in exps)
+            st.metric("Total Expenses",f"₹ {total_exp:,.2f}")
+            st.markdown("---")
+            
+            # ---- Delete All option (Admin only) ----
+            if st.session_state.user_role == 'admin':
+                with st.expander("🗑️ Bulk Delete Options"):
+                    st.warning("⚠️ These actions cannot be undone!")
+                    dc1, dc2 = st.columns(2)
+                    with dc1:
+                        if st.button("🗑️ Delete ALL Expenses", type="primary", use_container_width=True, key="del_all_exp"):
+                            st.session_state['confirm_del_all_exp'] = True
+                    if st.session_state.get('confirm_del_all_exp', False):
+                        st.error("⚠️ Are you sure? This will delete ALL expense records!")
+                        cc1, cc2 = st.columns(2)
+                        with cc1:
+                            if st.button("✅ Yes, Delete All", key="confirm_yes_exp", use_container_width=True):
+                                deleted = 0
+                                for e in exps:
+                                    if db_delete("expenses", "id", e['id']):
+                                        deleted += 1
+                                st.session_state['confirm_del_all_exp'] = False
+                                st.success(f"✅ Deleted {deleted} expense records!")
+                                time.sleep(0.5)
+                                st.rerun()
+                        with cc2:
+                            if st.button("❌ Cancel", key="confirm_no_exp", use_container_width=True):
+                                st.session_state['confirm_del_all_exp'] = False
+                                st.rerun()
+            
+            # ---- Individual Expense Cards with Delete ----
+            for e in exps:
+                with st.container():
+                    ec1, ec2, ec3, ec4, ec5 = st.columns([2, 2, 2, 3, 1])
+                    with ec1:
+                        st.markdown(f"📅 **{e.get('expense_date','')}**")
+                    with ec2:
+                        st.markdown(f"🏷️ {e.get('expense_type','')}")
+                    with ec3:
+                        st.markdown(f"💰 **₹{float(e.get('amount',0)):,.2f}**")
+                    with ec4:
+                        desc = e.get('description','')
+                        if desc:
+                            st.markdown(f"📝 {desc[:50]}{'...' if len(str(desc))>50 else ''}")
+                        else:
+                            st.markdown("📝 —")
+                    with ec5:
+                        if st.button("🗑️", key=f"del_exp_{e['id']}", help="Delete this expense"):
+                            db_delete("expenses", "id", e['id'])
+                            st.rerun()
+                    st.markdown("<hr style='margin:2px 0;border:none;border-top:1px solid #eee;'>", unsafe_allow_html=True)
+            
+            # ---- Download as CSV ----
+            st.markdown("---")
+            exp_df = pd.DataFrame([{
+                "Date": e.get('expense_date',''),
+                "Type": e.get('expense_type',''),
+                "Amount": float(e.get('amount',0)),
+                "Description": e.get('description','')
+            } for e in exps])
+            st.download_button("📥 Download Expenses CSV", exp_df.to_csv(index=False), "expenses.csv", "text/csv", use_container_width=True)
+        else:
+            st.info("📭 No expenses recorded yet.")
 
 # ============================================================
 # PAGE: REPORTS
