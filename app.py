@@ -860,35 +860,500 @@ def page_expenses():
         else: st.info("📭 No expenses yet.")
 
 # ============================================================
-# PAGE: REPORTS
+# PAGE: REPORTS (with CSV, XLSX, PDF download)
 # ============================================================
 def page_reports():
-    st.markdown('<div class="main-header"><h1>📊 Reports</h1><p>Financial reports</p></div>',unsafe_allow_html=True)
-    rc1,rc2,rc3=st.columns(3)
-    with rc1: period=st.selectbox("Period",["Daily","Weekly","Monthly","Yearly","Custom"])
-    t=date.today()
-    if period=="Custom":
-        with rc2: sd=st.date_input("From",value=t-timedelta(30))
-        with rc3: ed=st.date_input("To",value=t)
-    else: sd,ed=get_period_dates(period)
-    ptn=["All"]+[p['name'] for p in db_select("pooja_types","name")]; pf=st.selectbox("Pooja Filter",ptn)
-    bills=db_select("bills",gte_filters={"bill_date":sd},lte_filters={"bill_date":ed})
-    exps=db_select("expenses",gte_filters={"expense_date":sd},lte_filters={"expense_date":ed})
-    if pf!="All": bills=[b for b in bills if b.get('pooja_type')==pf]
-    ti=sum(float(b.get('amount',0)) for b in bills); te=sum(float(e.get('amount',0)) for e in exps)
-    mc1,mc2,mc3=st.columns(3)
-    with mc1: st.markdown(f'<div class="metric-card income"><h3>Income</h3><h2>₹{ti:,.2f}</h2></div>',unsafe_allow_html=True)
-    with mc2: st.markdown(f'<div class="metric-card expense"><h3>Expenses</h3><h2>₹{te:,.2f}</h2></div>',unsafe_allow_html=True)
-    with mc3: st.markdown(f'<div class="metric-card balance"><h3>Balance</h3><h2>₹{ti-te:,.2f}</h2></div>',unsafe_allow_html=True)
-    rt1,rt2,rt3=st.tabs(["Income","Expenses","Charts"])
+    st.markdown('<div class="main-header"><h1>📊 Reports</h1><p>Financial Reports with Download</p></div>', unsafe_allow_html=True)
+
+    # ---- Filters ----
+    rc1, rc2, rc3 = st.columns(3)
+    with rc1: period = st.selectbox("Period", ["Daily", "Weekly", "Monthly", "Yearly", "Custom"])
+    t = date.today()
+    if period == "Custom":
+        with rc2: sd = st.date_input("From", value=t - timedelta(30))
+        with rc3: ed = st.date_input("To", value=t)
+    else:
+        sd, ed = get_period_dates(period)
+
+    ptn = ["All"] + [p['name'] for p in db_select("pooja_types", "name")]
+    pf = st.selectbox("Pooja Filter", ptn)
+
+    bills = db_select("bills", gte_filters={"bill_date": sd}, lte_filters={"bill_date": ed})
+    exps = db_select("expenses", gte_filters={"expense_date": sd}, lte_filters={"expense_date": ed})
+    if pf != "All":
+        bills = [b for b in bills if b.get('pooja_type') == pf]
+
+    ti = sum(float(b.get('amount', 0)) for b in bills)
+    te = sum(float(e.get('amount', 0)) for e in exps)
+
+    # ---- Summary Cards ----
+    mc1, mc2, mc3 = st.columns(3)
+    with mc1: st.markdown(f'<div class="metric-card income"><h3>💰 Income</h3><h2>₹{ti:,.2f}</h2></div>', unsafe_allow_html=True)
+    with mc2: st.markdown(f'<div class="metric-card expense"><h3>💸 Expenses</h3><h2>₹{te:,.2f}</h2></div>', unsafe_allow_html=True)
+    with mc3: st.markdown(f'<div class="metric-card balance"><h3>💎 Balance</h3><h2>₹{ti - te:,.2f}</h2></div>', unsafe_allow_html=True)
+
+    # ---- Build DataFrames ----
+    # Income DataFrame with devotee name resolution
+    income_rows = []
+    for b in bills:
+        bname = b.get('guest_name', '')
+        if b.get('devotee_type') == 'enrolled' and b.get('devotee_id'):
+            dd = db_select("devotees", "name", filters={"id": b['devotee_id']})
+            if dd: bname = dd[0]['name']
+        income_rows.append({
+            "Bill No": b.get('bill_no', ''),
+            "Manual Bill": b.get('manual_bill_no', ''),
+            "Date": b.get('bill_date', ''),
+            "Name": bname,
+            "Pooja Type": b.get('pooja_type', ''),
+            "Amount": float(b.get('amount', 0))
+        })
+    income_df = pd.DataFrame(income_rows) if income_rows else pd.DataFrame(columns=["Bill No", "Manual Bill", "Date", "Name", "Pooja Type", "Amount"])
+
+    expense_rows = []
+    for e in exps:
+        expense_rows.append({
+            "Date": e.get('expense_date', ''),
+            "Type": e.get('expense_type', ''),
+            "Description": e.get('description', ''),
+            "Amount": float(e.get('amount', 0))
+        })
+    expense_df = pd.DataFrame(expense_rows) if expense_rows else pd.DataFrame(columns=["Date", "Type", "Description", "Amount"])
+
+    # Summary DataFrame
+    summary_df = pd.DataFrame({
+        "Category": ["Total Income", "Total Expenses", "Net Balance"],
+        "Amount (₹)": [ti, te, ti - te]
+    })
+
+    # ---- Tabs ----
+    rt1, rt2, rt3, rt4 = st.tabs(["💰 Income", "💸 Expenses", "📈 Charts", "📥 Download Reports"])
+
     with rt1:
-        if bills:
-            df=pd.DataFrame([{"Bill":b.get('bill_no',''),"Date":b.get('bill_date',''),"Pooja":b.get('pooja_type',''),"Amount":float(b.get('amount',0))} for b in bills])
-            st.dataframe(df,use_container_width=True,hide_index=True); st.download_button("📥 CSV",df.to_csv(index=False),"income.csv")
+        if not income_df.empty:
+            st.markdown(f"**{len(income_df)} records | Total: ₹{ti:,.2f}**")
+            st.dataframe(income_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("📭 No income records for this period.")
+
     with rt2:
-        if exps: st.dataframe(pd.DataFrame([{"Date":e.get('expense_date',''),"Type":e.get('expense_type',''),"Amount":float(e.get('amount',0))} for e in exps]),use_container_width=True,hide_index=True)
+        if not expense_df.empty:
+            st.markdown(f"**{len(expense_df)} records | Total: ₹{te:,.2f}**")
+            st.dataframe(expense_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("📭 No expense records for this period.")
+
     with rt3:
-        if bills or exps: st.bar_chart(pd.DataFrame({"Cat":["Income","Expenses"],"₹":[ti,te]}).set_index("Cat"))
+        if not income_df.empty or not expense_df.empty:
+            st.markdown("#### 📊 Income vs Expenses")
+            st.bar_chart(pd.DataFrame({"Category": ["Income", "Expenses"], "₹": [ti, te]}).set_index("Category"))
+
+            if not income_df.empty:
+                st.markdown("#### 🙏 Income by Pooja Type")
+                pooja_summary = income_df.groupby("Pooja Type")["Amount"].sum().reset_index()
+                pooja_summary.columns = ["Pooja Type", "₹"]
+                st.bar_chart(pooja_summary.set_index("Pooja Type"))
+
+            if not expense_df.empty:
+                st.markdown("#### 💸 Expenses by Type")
+                exp_summary = expense_df.groupby("Type")["Amount"].sum().reset_index()
+                exp_summary.columns = ["Type", "₹"]
+                st.bar_chart(exp_summary.set_index("Type"))
+        else:
+            st.info("📭 No data to display charts.")
+
+    # ============================================================
+    # DOWNLOAD TAB - CSV, XLSX, PDF
+    # ============================================================
+    with rt4:
+        st.markdown("### 📥 Download Reports")
+        st.markdown(f"**Period:** {sd} to {ed} | **Filter:** {pf}")
+        st.markdown("---")
+
+        report_type = st.selectbox("📋 Select Report", [
+            "Full Report (Income + Expenses + Summary)",
+            "Income Report Only",
+            "Expense Report Only",
+            "Summary Only"
+        ])
+
+        st.markdown("---")
+        st.markdown("#### Choose Download Format:")
+
+        dl1, dl2, dl3 = st.columns(3)
+
+        # ---- CSV DOWNLOAD ----
+        with dl1:
+            st.markdown("""
+            <div style="text-align:center;padding:15px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:12px;margin-bottom:10px;">
+                <p style="color:white;font-size:1.5em;margin:0;">📄</p>
+                <p style="color:white;font-weight:600;margin:5px 0 0 0;">CSV Format</p>
+                <p style="color:rgba(255,255,255,0.7);font-size:0.75em;margin:0;">Spreadsheet compatible</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            csv_buffer = io.StringIO()
+            if report_type == "Full Report (Income + Expenses + Summary)":
+                csv_buffer.write(f"# {TEMPLE_NAME}\n")
+                csv_buffer.write(f"# {TEMPLE_TRUST} | {TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}\n")
+                csv_buffer.write(f"# Report Period: {sd} to {ed} | Filter: {pf}\n")
+                csv_buffer.write(f"# Generated: {datetime.now().strftime('%d-%m-%Y %H:%M')}\n\n")
+
+                csv_buffer.write("=== SUMMARY ===\n")
+                summary_df.to_csv(csv_buffer, index=False)
+                csv_buffer.write(f"\n=== INCOME ({len(income_df)} records) ===\n")
+                income_df.to_csv(csv_buffer, index=False)
+                csv_buffer.write(f"\n=== EXPENSES ({len(expense_df)} records) ===\n")
+                expense_df.to_csv(csv_buffer, index=False)
+            elif report_type == "Income Report Only":
+                income_df.to_csv(csv_buffer, index=False)
+            elif report_type == "Expense Report Only":
+                expense_df.to_csv(csv_buffer, index=False)
+            else:
+                summary_df.to_csv(csv_buffer, index=False)
+
+            st.download_button(
+                "📄 Download CSV",
+                data=csv_buffer.getvalue().encode('utf-8'),
+                file_name=f"Report_{sd}_to_{ed}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="dl_csv"
+            )
+
+        # ---- XLSX DOWNLOAD ----
+        with dl2:
+            st.markdown("""
+            <div style="text-align:center;padding:15px;background:linear-gradient(135deg,#11998e,#38ef7d);border-radius:12px;margin-bottom:10px;">
+                <p style="color:white;font-size:1.5em;margin:0;">📊</p>
+                <p style="color:white;font-weight:600;margin:5px 0 0 0;">Excel Format</p>
+                <p style="color:rgba(255,255,255,0.7);font-size:0.75em;margin:0;">Multi-sheet workbook</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if EXCEL_ENGINE:
+                xlsx_buffer = io.BytesIO()
+                try:
+                    with pd.ExcelWriter(xlsx_buffer, engine=EXCEL_ENGINE) as writer:
+                        if report_type in ["Full Report (Income + Expenses + Summary)", "Summary Only"]:
+                            # Summary sheet
+                            sum_data = summary_df.copy()
+                            header_df = pd.DataFrame({
+                                "Category": [TEMPLE_NAME, TEMPLE_TRUST, f"{TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}",
+                                             f"Period: {sd} to {ed}", f"Filter: {pf}",
+                                             f"Generated: {datetime.now().strftime('%d-%m-%Y %H:%M')}", ""],
+                                "Amount (₹)": ["", "", "", "", "", "", ""]
+                            })
+                            full_summary = pd.concat([header_df, sum_data], ignore_index=True)
+                            full_summary.to_excel(writer, index=False, sheet_name='Summary')
+
+                        if report_type in ["Full Report (Income + Expenses + Summary)", "Income Report Only"]:
+                            if not income_df.empty:
+                                income_df.to_excel(writer, index=False, sheet_name='Income')
+                            else:
+                                pd.DataFrame({"Info": ["No income records"]}).to_excel(writer, index=False, sheet_name='Income')
+
+                        if report_type in ["Full Report (Income + Expenses + Summary)", "Expense Report Only"]:
+                            if not expense_df.empty:
+                                expense_df.to_excel(writer, index=False, sheet_name='Expenses')
+                            else:
+                                pd.DataFrame({"Info": ["No expense records"]}).to_excel(writer, index=False, sheet_name='Expenses')
+
+                        # Pooja-wise breakdown
+                        if report_type in ["Full Report (Income + Expenses + Summary)", "Income Report Only"]:
+                            if not income_df.empty:
+                                pooja_breakdown = income_df.groupby("Pooja Type")["Amount"].agg(['sum', 'count']).reset_index()
+                                pooja_breakdown.columns = ["Pooja Type", "Total Amount (₹)", "No. of Bills"]
+                                pooja_breakdown = pooja_breakdown.sort_values("Total Amount (₹)", ascending=False)
+                                pooja_breakdown.to_excel(writer, index=False, sheet_name='Pooja Breakdown')
+
+                    st.download_button(
+                        "📊 Download Excel",
+                        data=xlsx_buffer.getvalue(),
+                        file_name=f"Report_{sd}_to_{ed}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="dl_xlsx"
+                    )
+                except Exception as e:
+                    st.error(f"Excel error: {e}")
+            else:
+                st.warning("⚠️ Excel engine not available. Install `xlsxwriter` or `openpyxl`.")
+
+        # ---- PDF DOWNLOAD ----
+        with dl3:
+            st.markdown("""
+            <div style="text-align:center;padding:15px;background:linear-gradient(135deg,#eb3349,#f45c43);border-radius:12px;margin-bottom:10px;">
+                <p style="color:white;font-size:1.5em;margin:0;">📕</p>
+                <p style="color:white;font-weight:600;margin:5px 0 0 0;">PDF Format</p>
+                <p style="color:rgba(255,255,255,0.7);font-size:0.75em;margin:0;">Print-ready document</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if PDF_AVAILABLE:
+                try:
+                    class ReportPDF(FPDF):
+                        def __init__(self, amman_img_path=None):
+                            super().__init__()
+                            self.amman_img_path = amman_img_path
+
+                        def header(self):
+                            # Amman image
+                            if self.amman_img_path and os.path.exists(self.amman_img_path):
+                                try:
+                                    self.image(self.amman_img_path, x=(210 - 20) / 2, y=6, w=20, h=20)
+                                    self.ln(22)
+                                except:
+                                    self.ln(5)
+                            else:
+                                self.ln(5)
+
+                            self.set_font('Helvetica', 'B', 14)
+                            self.set_text_color(139, 0, 0)
+                            self.cell(0, 7, TEMPLE_NAME, 0, 1, 'C')
+
+                            self.set_font('Helvetica', 'B', 9)
+                            self.set_text_color(80, 80, 80)
+                            self.cell(0, 5, TEMPLE_TRUST, 0, 1, 'C')
+
+                            self.set_font('Helvetica', '', 8)
+                            self.set_text_color(100, 100, 100)
+                            self.cell(0, 5, f"{TEMPLE_ADDRESS_LINE1} - {TEMPLE_PINCODE}", 0, 1, 'C')
+
+                            self.set_draw_color(255, 107, 53)
+                            self.set_line_width(0.6)
+                            self.line(10, self.get_y() + 2, 200, self.get_y() + 2)
+                            self.ln(5)
+                            self.set_text_color(0, 0, 0)
+
+                        def footer(self):
+                            self.set_y(-20)
+                            self.set_draw_color(255, 107, 53)
+                            self.set_line_width(0.3)
+                            self.line(10, self.get_y(), 200, self.get_y())
+                            self.ln(3)
+                            self.set_font('Helvetica', 'I', 7)
+                            self.set_text_color(150, 150, 150)
+                            self.cell(0, 4, f"{TEMPLE_FULL_ADDRESS}", 0, 1, 'C')
+                            self.cell(0, 4, f"Page {self.page_no()}/{{nb}} | Generated: {datetime.now().strftime('%d-%m-%Y %H:%M')}", 0, 1, 'C')
+
+                        def section_title(self, title):
+                            self.set_font('Helvetica', 'B', 12)
+                            self.set_text_color(139, 0, 0)
+                            self.set_fill_color(255, 248, 240)
+                            self.cell(0, 8, f"  {title}", 0, 1, 'L', fill=True)
+                            self.ln(3)
+                            self.set_text_color(0, 0, 0)
+
+                        def summary_box(self, income, expense, balance):
+                            y = self.get_y()
+                            box_w = 58
+                            gap = 3
+                            start_x = (210 - (box_w * 3 + gap * 2)) / 2
+
+                            # Income box
+                            self.set_fill_color(17, 153, 142)
+                            self.set_text_color(255, 255, 255)
+                            self.set_xy(start_x, y)
+                            self.set_font('Helvetica', 'B', 8)
+                            self.cell(box_w, 6, "INCOME", 0, 2, 'C', fill=True)
+                            self.set_font('Helvetica', 'B', 12)
+                            self.cell(box_w, 8, f"Rs. {income:,.2f}", 0, 0, 'C', fill=True)
+
+                            # Expense box
+                            self.set_fill_color(235, 51, 73)
+                            self.set_xy(start_x + box_w + gap, y)
+                            self.set_font('Helvetica', 'B', 8)
+                            self.cell(box_w, 6, "EXPENSES", 0, 2, 'C', fill=True)
+                            self.set_font('Helvetica', 'B', 12)
+                            self.cell(box_w, 8, f"Rs. {expense:,.2f}", 0, 0, 'C', fill=True)
+
+                            # Balance box
+                            self.set_fill_color(79, 172, 254)
+                            self.set_xy(start_x + (box_w + gap) * 2, y)
+                            self.set_font('Helvetica', 'B', 8)
+                            self.cell(box_w, 6, "BALANCE", 0, 2, 'C', fill=True)
+                            self.set_font('Helvetica', 'B', 12)
+                            self.cell(box_w, 8, f"Rs. {balance:,.2f}", 0, 0, 'C', fill=True)
+
+                            self.set_text_color(0, 0, 0)
+                            self.set_y(y + 20)
+                            self.ln(5)
+
+                        def add_table(self, headers, data, col_widths=None):
+                            if col_widths is None:
+                                col_widths = [190 / len(headers)] * len(headers)
+
+                            # Header row
+                            self.set_font('Helvetica', 'B', 8)
+                            self.set_fill_color(255, 107, 53)
+                            self.set_text_color(255, 255, 255)
+                            for i, h in enumerate(headers):
+                                self.cell(col_widths[i], 7, str(h), 1, 0, 'C', fill=True)
+                            self.ln()
+
+                            # Data rows
+                            self.set_font('Helvetica', '', 7)
+                            self.set_text_color(0, 0, 0)
+                            fill = False
+                            for row in data:
+                                if self.get_y() > 260:
+                                    self.add_page()
+                                    # Re-draw header on new page
+                                    self.set_font('Helvetica', 'B', 8)
+                                    self.set_fill_color(255, 107, 53)
+                                    self.set_text_color(255, 255, 255)
+                                    for i, h in enumerate(headers):
+                                        self.cell(col_widths[i], 7, str(h), 1, 0, 'C', fill=True)
+                                    self.ln()
+                                    self.set_font('Helvetica', '', 7)
+                                    self.set_text_color(0, 0, 0)
+
+                                if fill:
+                                    self.set_fill_color(255, 248, 240)
+                                else:
+                                    self.set_fill_color(255, 255, 255)
+                                for i, val in enumerate(row):
+                                    align = 'R' if i == len(row) - 1 else 'L'
+                                    self.cell(col_widths[i], 6, str(val)[:40], 1, 0, align, fill=True)
+                                self.ln()
+                                fill = not fill
+                            self.ln(3)
+
+                    # Generate PDF
+                    amman_path = get_amman_image_for_pdf()
+                    rpdf = ReportPDF(amman_img_path=amman_path)
+                    rpdf.alias_nb_pages()
+                    rpdf.add_page()
+                    rpdf.set_auto_page_break(auto=True, margin=25)
+
+                    # Report Title
+                    rpdf.set_font('Helvetica', 'B', 11)
+                    rpdf.set_text_color(80, 80, 80)
+                    rpdf.cell(0, 6, f"Financial Report | {sd} to {ed} | Filter: {pf}", 0, 1, 'C')
+                    rpdf.ln(5)
+
+                    # Summary boxes
+                    if report_type in ["Full Report (Income + Expenses + Summary)", "Summary Only"]:
+                        rpdf.section_title("FINANCIAL SUMMARY")
+                        rpdf.summary_box(ti, te, ti - te)
+
+                    # Income table
+                    if report_type in ["Full Report (Income + Expenses + Summary)", "Income Report Only"]:
+                        rpdf.section_title(f"INCOME DETAILS ({len(income_df)} records | Total: Rs. {ti:,.2f})")
+                        if not income_df.empty:
+                            headers = ["Bill No", "Manual", "Date", "Name", "Pooja", "Amount"]
+                            widths = [40, 22, 22, 38, 35, 23]
+                            data = []
+                            for _, r in income_df.iterrows():
+                                data.append([
+                                    str(r['Bill No'])[:18],
+                                    str(r['Manual Bill'])[:10],
+                                    str(r['Date']),
+                                    str(r['Name'])[:18],
+                                    str(r['Pooja Type'])[:16],
+                                    f"Rs.{r['Amount']:,.2f}"
+                                ])
+                            rpdf.add_table(headers, data, widths)
+
+                            # Pooja-wise breakdown
+                            rpdf.section_title("POOJA-WISE BREAKDOWN")
+                            pooja_grp = income_df.groupby("Pooja Type")["Amount"].agg(['sum', 'count']).reset_index()
+                            pooja_grp.columns = ["Pooja Type", "Total", "Count"]
+                            pooja_grp = pooja_grp.sort_values("Total", ascending=False)
+                            p_headers = ["Pooja Type", "No. of Bills", "Total Amount"]
+                            p_widths = [70, 50, 70]
+                            p_data = [[str(r['Pooja Type']), str(int(r['Count'])), f"Rs.{r['Total']:,.2f}"] for _, r in pooja_grp.iterrows()]
+                            rpdf.add_table(p_headers, p_data, p_widths)
+                        else:
+                            rpdf.set_font('Helvetica', 'I', 9)
+                            rpdf.cell(0, 8, "No income records for this period.", 0, 1, 'C')
+                            rpdf.ln(5)
+
+                    # Expense table
+                    if report_type in ["Full Report (Income + Expenses + Summary)", "Expense Report Only"]:
+                        rpdf.section_title(f"EXPENSE DETAILS ({len(expense_df)} records | Total: Rs. {te:,.2f})")
+                        if not expense_df.empty:
+                            headers = ["Date", "Type", "Description", "Amount"]
+                            widths = [30, 40, 85, 35]
+                            data = []
+                            for _, r in expense_df.iterrows():
+                                data.append([
+                                    str(r['Date']),
+                                    str(r['Type'])[:18],
+                                    str(r['Description'])[:40],
+                                    f"Rs.{r['Amount']:,.2f}"
+                                ])
+                            rpdf.add_table(headers, data, widths)
+
+                            # Type-wise breakdown
+                            rpdf.section_title("EXPENSE TYPE BREAKDOWN")
+                            exp_grp = expense_df.groupby("Type")["Amount"].agg(['sum', 'count']).reset_index()
+                            exp_grp.columns = ["Type", "Total", "Count"]
+                            exp_grp = exp_grp.sort_values("Total", ascending=False)
+                            e_headers = ["Expense Type", "No. of Entries", "Total Amount"]
+                            e_widths = [70, 50, 70]
+                            e_data = [[str(r['Type']), str(int(r['Count'])), f"Rs.{r['Total']:,.2f}"] for _, r in exp_grp.iterrows()]
+                            rpdf.add_table(e_headers, e_data, e_widths)
+                        else:
+                            rpdf.set_font('Helvetica', 'I', 9)
+                            rpdf.cell(0, 8, "No expense records for this period.", 0, 1, 'C')
+                            rpdf.ln(5)
+
+                    pdf_bytes = bytes(rpdf.output())
+
+                    st.download_button(
+                        "📕 Download PDF",
+                        data=pdf_bytes,
+                        file_name=f"Report_{sd}_to_{ed}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="dl_pdf"
+                    )
+
+                except Exception as e:
+                    st.error(f"PDF generation error: {e}")
+            else:
+                st.warning("⚠️ PDF not available. Install `fpdf2`.")
+
+        # ---- Quick Download All Formats ----
+        st.markdown("---")
+        st.markdown("#### 🚀 Quick Download (Full Report - All Formats)")
+        qc1, qc2, qc3 = st.columns(3)
+        with qc1:
+            quick_csv = io.StringIO()
+            quick_csv.write(f"# {TEMPLE_NAME} | {TEMPLE_TRUST}\n")
+            quick_csv.write(f"# Period: {sd} to {ed}\n\n")
+            quick_csv.write("=== SUMMARY ===\n")
+            summary_df.to_csv(quick_csv, index=False)
+            quick_csv.write(f"\n=== INCOME ===\n")
+            income_df.to_csv(quick_csv, index=False)
+            quick_csv.write(f"\n=== EXPENSES ===\n")
+            expense_df.to_csv(quick_csv, index=False)
+            st.download_button("📄 Full CSV", data=quick_csv.getvalue().encode('utf-8'),
+                               file_name=f"Full_Report_{sd}.csv", mime="text/csv",
+                               use_container_width=True, key="quick_csv")
+        with qc2:
+            if EXCEL_ENGINE:
+                try:
+                    qx = io.BytesIO()
+                    with pd.ExcelWriter(qx, engine=EXCEL_ENGINE) as w:
+                        summary_df.to_excel(w, index=False, sheet_name='Summary')
+                        if not income_df.empty: income_df.to_excel(w, index=False, sheet_name='Income')
+                        if not expense_df.empty: expense_df.to_excel(w, index=False, sheet_name='Expenses')
+                    st.download_button("📊 Full Excel", data=qx.getvalue(),
+                                       file_name=f"Full_Report_{sd}.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                       use_container_width=True, key="quick_xlsx")
+                except:
+                    st.warning("Excel error")
+            else:
+                st.warning("No Excel engine")
+        with qc3:
+            if PDF_AVAILABLE:
+                st.markdown('<p style="color:#888;font-size:0.85em;text-align:center;margin-top:10px;">👆 Use PDF button above<br>with "Full Report" selected</p>', unsafe_allow_html=True)
+            else:
+                st.warning("No PDF engine")
 
 # ============================================================
 # PAGE: ASSETS
