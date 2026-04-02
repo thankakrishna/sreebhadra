@@ -1,9 +1,8 @@
-streamlit
-supabase
-pandas
-fpdf2
-openpyxl
-xlsxwriter
-flask-sqlalchemy
-flask-login
-bcrypt
+streamlit==1.38.0
+supabase==2.9.1
+python-dateutil==2.9.0
+Pillow==10.4.0
+bcrypt==4.2.0
+pandas==2.2.2
+plotly==5.24.0
+streamlit-option-menu==0.3.13
