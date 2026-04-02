@@ -404,7 +404,7 @@ def create_default_admin():
     if not result.data:
         db.table('users').insert({
             'username': 'admin',
-            'password_hash': hash_password('admin123'),
+            'password_hash': hash_password('admin1234'),
             'full_name': 'Temple Admin',
             'role': 'admin',
             'is_active_user': True
