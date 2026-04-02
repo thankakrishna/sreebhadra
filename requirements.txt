@@ -6,3 +6,4 @@ openpyxl
 xlsxwriter
 flask-sqlalchemy
 flask-login
+bcrypt
